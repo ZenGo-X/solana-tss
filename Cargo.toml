@@ -1,0 +1,9 @@
+[package]
+name = "solana-tss"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+solana-client = "1"
+solana-sdk = "1"
+spl-memo = "3"
