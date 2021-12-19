@@ -13,6 +13,9 @@ pub enum Options {
     Balance {
         /// The address to check the balance of
         address: Pubkey,
+        /// Choose the desired netwrok: Mainnet/Testnet/Devnet
+        #[structopt(default_value = "testnet")]
+        net: Network,
     },
     /// Request an airdrop from a faucet.
     Airdrop {

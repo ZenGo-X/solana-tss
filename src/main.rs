@@ -25,7 +25,11 @@ fn main() -> Result<(), Error> {
             let keypair = Keypair::generate(&mut rng);
             println!("secret key: {}", bs58::encode(keypair.secret()).into_string());
             println!("public key: {}", keypair.pubkey());
-            return Ok(());
+        }
+        Options::Balance { address, net } => {
+            let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
+            let balance = rpc_client.get_balance(&address).map_err(Error::BalaceError)?;
+            println!("The balance of {} is: {}", address, balance);
         }
         Options::Airdrop { to, amount, net } => {
             let rpc_client = RpcClient::new(net.get_cluster_url().to_string());

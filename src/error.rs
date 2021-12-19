@@ -10,6 +10,7 @@ pub enum Error {
     AirdropFailed(ClientError),
     RecentHashFailed(ClientError),
     ConfirmingTransactionFailed(ClientError),
+    BalaceError(ClientError),
 }
 
 impl Display for Error {
@@ -23,6 +24,7 @@ impl Display for Error {
             Self::ConfirmingTransactionFailed(e) => {
                 write!(f, "Failed confirming transaction: {}", e)
             }
+            Self::BalaceError(e) => write!(f, "Failed checking balance: {}", e),
         }
     }
 }
