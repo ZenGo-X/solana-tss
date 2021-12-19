@@ -1,6 +1,11 @@
+use bincode::Options as _;
 use curv::elliptic::curves::Point;
-use multi_party_eddsa::protocols::aggsig::KeyAgg;
+use multi_party_eddsa::protocols::{
+    aggsig::{self, KeyAgg},
+    ExpendedKeyPair,
+};
 use rand::thread_rng;
+use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
@@ -74,6 +79,26 @@ fn main() -> Result<(), Error> {
             let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
             println!("The Aggregated PublicKey: {}", aggpubkey);
         }
+        Options::AggSendStepOne { keypair } => {
+            let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
+            // we don't really need to pass a message here.
+            let (ephemeral, first_msg, second_msg) = aggsig::create_ephemeral_key_and_commit(&extended_kepair, &[]);
+            let serializer = bincode::DefaultOptions::new().with_varint_encoding();
+            println!("Message 1, send to all other parties: {}", hex::encode(serializer.serialize(&first_msg)?));
+
+            let secret = SecretAggStepOne { ephemeral, second_msg };
+
+            println!(
+                "Secret state: keep this a secret, and pass it back to `agg-send-step-two`: {}",
+                hex::encode(serializer.serialize(&secret)?)
+            );
+        }
     }
     Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct SecretAggStepOne {
+    ephemeral: aggsig::EphemeralKey,
+    second_msg: aggsig::SignSecondMsg,
 }

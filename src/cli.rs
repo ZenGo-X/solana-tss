@@ -43,10 +43,16 @@ pub enum Options {
         /// Add a memo to the transaction
         memo: Option<String>,
     },
-    // Aggregate a list of addresses into a single address that they can all sign on together
+    /// Aggregate a list of addresses into a single address that they can all sign on together
     AggregateKeys {
         /// List of addresses
         keys: Vec<Pubkey>,
+    },
+    /// Start aggregate signing
+    AggSendStepOne {
+        /// A Base58 secret key of the party signing
+        #[structopt(parse(try_from_str = parse_keypair_bs58))]
+        keypair: Keypair,
     },
 }
 

@@ -12,6 +12,7 @@ pub enum Error {
     ConfirmingTransactionFailed(ClientError),
     BalaceFailed(ClientError),
     SendTransactionFailed(ClientError),
+    SerializationFailed(bincode::Error),
 }
 
 impl Display for Error {
@@ -27,6 +28,7 @@ impl Display for Error {
             }
             Self::BalaceFailed(e) => write!(f, "Failed checking balance: {}", e),
             Self::SendTransactionFailed(e) => write!(f, "Failed sending transaction: {}", e),
+            Self::SerializationFailed(e) => write!(f, "Failed serializing an object: {}", e),
         }
     }
 }
@@ -40,6 +42,12 @@ impl From<Bs58Error> for Error {
 impl From<ed25519_dalek::SignatureError> for Error {
     fn from(e: ed25519_dalek::SignatureError) -> Self {
         Self::WrongKeyPair(e)
+    }
+}
+
+impl From<bincode::Error> for Error {
+    fn from(e: bincode::Error) -> Self {
+        Self::SerializationFailed(e)
     }
 }
 
