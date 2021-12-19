@@ -1,16 +1,19 @@
+use std::error::Error as StdError;
+use std::fmt::{Display, Formatter};
+
 use bs58::decode::Error as Bs58Error;
 use solana_client::client_error::ClientError;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub enum Error {
     WrongNetwork(String),
     BadBase58(Bs58Error),
-    SignatureError(ed25519_dalek::SignatureError),
+    SignatureError(Box<dyn StdError>),
     AirdropFailed(ClientError),
     RecentHashFailed(ClientError),
     ConfirmingTransactionFailed(ClientError),
-    BalaceError(ClientError),
+    BalaceFailed(ClientError),
+    SendTransactionFailed(ClientError),
 }
 
 impl Display for Error {
@@ -24,7 +27,8 @@ impl Display for Error {
             Self::ConfirmingTransactionFailed(e) => {
                 write!(f, "Failed confirming transaction: {}", e)
             }
-            Self::BalaceError(e) => write!(f, "Failed checking balance: {}", e),
+            Self::BalaceFailed(e) => write!(f, "Failed checking balance: {}", e),
+            Self::SendTransactionFailed(e) => write!(f, "Failed sending transaction: {}", e),
         }
     }
 }
@@ -35,10 +39,4 @@ impl From<Bs58Error> for Error {
     }
 }
 
-impl From<ed25519_dalek::SignatureError> for Error {
-    fn from(e: ed25519_dalek::SignatureError) -> Self {
-        Self::SignatureError(e)
-    }
-}
-
-impl std::error::Error for Error {}
+impl StdError for Error {}

@@ -1,8 +1,10 @@
-use crate::error::Error;
-use ed25519_dalek::SecretKey;
-use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{Keypair, keypair_from_seed};
 use structopt::StructOpt;
+
+use crate::error::Error;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "solana-tss", about = "A PoC for managing a Solana TSS wallet.")]
@@ -30,12 +32,17 @@ pub enum Options {
     /// Send a transaction using a single private key.
     SendSingle {
         /// A Base58 secret key
-        #[structopt(parse(try_from_str = parse_private_key_bs58))]
-        keypair: SecretKey,
+        #[structopt(parse(try_from_str = parse_keypair_bs58))]
+        keypair: Keypair,
         /// The amount of SOL you want to send.
         amount: f64,
         /// Address of the recipient
         to: Pubkey,
+        /// Choose the desired netwrok: Mainnet/Testnet/Devnet
+        #[structopt(default_value = "testnet")]
+        net: Network,
+        /// Add a memo to the transaction
+        memo: Option<String>,
     },
 }
 
@@ -68,7 +75,7 @@ impl FromStr for Network {
     }
 }
 
-fn parse_private_key_bs58(s: &str) -> Result<SecretKey, Error> {
+fn parse_keypair_bs58(s: &str) -> Result<Keypair, Error> {
     let decoded = bs58::decode(s).into_vec()?;
-    Ok(SecretKey::from_bytes(&decoded)?)
+    Ok(keypair_from_seed(&decoded).map_err(Error::SignatureError)?)
 }
