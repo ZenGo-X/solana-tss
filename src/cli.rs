@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{keypair_from_seed, Keypair};
+use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use structopt::StructOpt;
 
 use crate::error::Error;
@@ -43,6 +42,11 @@ pub enum Options {
         net: Network,
         /// Add a memo to the transaction
         memo: Option<String>,
+    },
+    // Aggregate a list of addresses into a single address that they can all sign on together
+    AggregateKeys {
+        /// List of addresses
+        keys: Vec<Pubkey>,
     },
 }
 

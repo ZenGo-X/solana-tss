@@ -1,3 +1,5 @@
+use curv::elliptic::curves::Point;
+use multi_party_eddsa::protocols::aggsig::KeyAgg;
 use rand::thread_rng;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::instruction::Instruction;
@@ -5,6 +7,7 @@ use solana_sdk::message::Message;
 use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{native_token, signature::Signer, system_instruction};
+use spl_memo::solana_program::pubkey::Pubkey;
 use structopt::StructOpt;
 
 use crate::cli::Options;
@@ -58,6 +61,18 @@ fn main() -> Result<(), Error> {
             rpc_client
                 .confirm_transaction_with_spinner(&sig, &recent_hash, rpc_client.commitment())
                 .map_err(Error::ConfirmingTransactionFailed)?;
+        }
+        Options::AggregateKeys { mut keys } => {
+            keys.sort(); // The order of the keys matter for the aggregate key
+            let keys: Vec<_> = keys
+                .into_iter()
+                .map(|key| {
+                    Point::from_bytes(&key.to_bytes()).expect("Should never fail, as these are valid ed25519 pubkeys")
+                })
+                .collect();
+            let aggkey = KeyAgg::key_aggregation_n(&keys, 0);
+            let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
+            println!("The Aggregated PublicKey: {}", aggpubkey);
         }
     }
     Ok(())

@@ -11,3 +11,5 @@ structopt = "0.3"
 bs58 = "0.4"
 rand = "0.7"
 ed25519-dalek = "1"
+multi-party-eddsa = { git = "https://github.com/ZenGo-X/multi-party-eddsa.git", branch = "curv-0.9" }
+curv = {package = "curv-kzen", version = "0.9" }
