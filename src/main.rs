@@ -53,12 +53,10 @@ fn main() -> Result<(), Error> {
 
     let amount = native_token::sol_to_lamports(5f64);
 
-    let sig = rpc_client
-        .request_airdrop(&keypair.pubkey(), amount)
-        .unwrap();
+    let sig = rpc_client.request_airdrop(&keypair.pubkey(), amount).unwrap();
     println!("sent: {}", sig);
 
-    let recent_hash= rpc_client.get_latest_blockhash().unwrap();
+    let recent_hash = rpc_client.get_latest_blockhash().unwrap();
 
     rpc_client.confirm_transaction_with_spinner(&sig, &recent_hash, rpc_client.commitment()).unwrap();
     let balance = rpc_client.get_balance(&keypair.pubkey()).unwrap();
@@ -71,7 +69,8 @@ fn main() -> Result<(), Error> {
 
     let sending = native_token::sol_to_lamports(1.4);
 
-    let instrcutions = vec![system_instruction::transfer(&keypair.pubkey(), &other_keypair.pubkey(), sending)].with_memo(Some("Threshold Solana"));
+    let instrcutions = vec![system_instruction::transfer(&keypair.pubkey(), &other_keypair.pubkey(), sending)]
+        .with_memo(Some("Threshold Solana"));
     let msg = Message::new(&instrcutions, Some(&keypair.pubkey()));
     let mut tx = Transaction::new_unsigned(msg);
     tx.sign(&[&keypair], recent_hash);
