@@ -13,6 +13,8 @@ pub enum Error {
     BalaceFailed(ClientError),
     SendTransactionFailed(ClientError),
     SerializationFailed(bincode::Error),
+    DeserializationHexFailed { error: hex::FromHexError, field_name: &'static str },
+    DeserializationBincodeFailed { error: bincode::Error, field_name: &'static str },
 }
 
 impl Display for Error {
@@ -29,6 +31,12 @@ impl Display for Error {
             Self::BalaceFailed(e) => write!(f, "Failed checking balance: {}", e),
             Self::SendTransactionFailed(e) => write!(f, "Failed sending transaction: {}", e),
             Self::SerializationFailed(e) => write!(f, "Failed serializing an object: {}", e),
+            Self::DeserializationHexFailed { error, field_name } => {
+                write!(f, "Failed deserializing hex of {}: {}", field_name, error)
+            }
+            Self::DeserializationBincodeFailed { error, field_name } => {
+                write!(f, "Failed deserializing {}: {}", field_name, error)
+            }
         }
     }
 }

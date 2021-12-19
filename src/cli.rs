@@ -54,6 +54,13 @@ pub enum Options {
         #[structopt(parse(try_from_str = parse_keypair_bs58))]
         keypair: Keypair,
     },
+    /// Step 2 of aggregate signing, you should pass in the secret data from step 1.
+    AggSendStepTwo {
+        /// A list of all the first messages received in step 1
+        first_messages: Vec<String>,
+        /// The secret state received in step 1.
+        secret_state: String,
+    },
 }
 
 #[derive(Debug)]

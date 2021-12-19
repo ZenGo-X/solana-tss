@@ -1,5 +1,6 @@
 use bincode::Options as _;
 use curv::elliptic::curves::Point;
+use multi_party_eddsa::protocols::aggsig::SignFirstMsg;
 use multi_party_eddsa::protocols::{
     aggsig::{self, KeyAgg},
     ExpendedKeyPair,
@@ -83,14 +84,43 @@ fn main() -> Result<(), Error> {
             let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
             // we don't really need to pass a message here.
             let (ephemeral, first_msg, second_msg) = aggsig::create_ephemeral_key_and_commit(&extended_kepair, &[]);
-            let serializer = bincode::DefaultOptions::new().with_varint_encoding();
-            println!("Message 1, send to all other parties: {}", hex::encode(serializer.serialize(&first_msg)?));
+            let bincode = bincode::DefaultOptions::new().with_varint_encoding();
+            println!("Message 1, send to all other parties: {}", hex::encode(bincode.serialize(&first_msg)?));
 
             let secret = SecretAggStepOne { ephemeral, second_msg };
 
             println!(
                 "Secret state: keep this a secret, and pass it back to `agg-send-step-two`: {}",
-                hex::encode(serializer.serialize(&secret)?)
+                hex::encode(bincode.serialize(&secret)?)
+            );
+        }
+        Options::AggSendStepTwo { first_messages, secret_state } => {
+            let bincode = bincode::DefaultOptions::new().with_varint_encoding();
+            let first_messages = first_messages
+                .into_iter()
+                .map(|msg| {
+                    let hex_decoded = hex::decode(msg)
+                        .map_err(|error| Error::DeserializationHexFailed { error, field_name: "first_messages" })?;
+                    bincode
+                        .deserialize(&hex_decoded)
+                        .map_err(|error| Error::DeserializationBincodeFailed { error, field_name: "first_messages" })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let secret_state_bytes = hex::decode(secret_state)
+                .map_err(|error| Error::DeserializationHexFailed { error, field_name: "secret_state" })?;
+            let secret_state: SecretAggStepOne = bincode
+                .deserialize(&secret_state_bytes)
+                .map_err(|error| Error::DeserializationBincodeFailed { error, field_name: "secret_state" })?;
+
+            println!(
+                "Message 2, send to all other parties: {}",
+                hex::encode(bincode.serialize(&secret_state.second_msg)?)
+            );
+
+            let secret = SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages };
+            println!(
+                "Secret state: keep this a secret, and pass it back to `agg-send-step-three`: {}",
+                hex::encode(bincode.serialize(&secret)?)
             );
         }
     }
@@ -101,4 +131,10 @@ fn main() -> Result<(), Error> {
 struct SecretAggStepOne {
     ephemeral: aggsig::EphemeralKey,
     second_msg: aggsig::SignSecondMsg,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SecretAggStepTwo {
+    ephemeral: aggsig::EphemeralKey,
+    first_messages: Vec<SignFirstMsg>,
 }
