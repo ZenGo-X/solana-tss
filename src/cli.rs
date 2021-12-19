@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, keypair_from_seed};
+use solana_sdk::signature::{keypair_from_seed, Keypair};
 use structopt::StructOpt;
 
 use crate::error::Error;
@@ -77,5 +77,5 @@ impl FromStr for Network {
 
 fn parse_keypair_bs58(s: &str) -> Result<Keypair, Error> {
     let decoded = bs58::decode(s).into_vec()?;
-    Ok(keypair_from_seed(&decoded).map_err(Error::SignatureError)?)
+    Ok(Keypair::from_bytes(&decoded)?)
 }

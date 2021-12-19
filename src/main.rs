@@ -1,10 +1,10 @@
 use rand::thread_rng;
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{native_token, signature::Signer, system_instruction};
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
 use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::transaction::Transaction;
+use solana_sdk::{native_token, signature::Signer, system_instruction};
 use structopt::StructOpt;
 
 use crate::cli::Options;
@@ -19,7 +19,7 @@ fn main() -> Result<(), Error> {
     match opts {
         Options::Generate => {
             let keypair = Keypair::generate(&mut rng);
-            println!("secret key: {}", bs58::encode(keypair.secret()).into_string());
+            println!("secret key: {}", keypair.to_base58_string());
             println!("public key: {}", keypair.pubkey());
         }
         Options::Balance { address, net } => {
@@ -45,11 +45,8 @@ fn main() -> Result<(), Error> {
             let msg = match memo {
                 None => Message::new(&[transfer_ins], Some(&keypair.pubkey())),
                 Some(memo) => {
-                    let memo_ins = Instruction {
-                        program_id: spl_memo::id(),
-                        accounts: Vec::new(),
-                        data: memo.into_bytes(),
-                    };
+                    let memo_ins =
+                        Instruction { program_id: spl_memo::id(), accounts: Vec::new(), data: memo.into_bytes() };
                     Message::new(&[transfer_ins, memo_ins], Some(&keypair.pubkey()))
                 }
             };
