@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use solana_sdk::hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use structopt::StructOpt;
 
@@ -56,9 +57,33 @@ pub enum Options {
     },
     /// Step 2 of aggregate signing, you should pass in the secret data from step 1.
     AggSendStepTwo {
+        /// A Base58 secret key of the party signing
+        #[structopt(parse(try_from_str = parse_keypair_bs58))]
+        keypair: Keypair,
         /// A list of all the first messages received in step 1
         first_messages: Vec<String>,
         /// The secret state received in step 1.
+        secret_state: String,
+    },
+    /// Step 3 of aggregate signing, you should pass in the secret data from step 2.
+    /// It's important that all parties pass in exactly the same transaction details (amount,to,net,memo,recent_block_hash)
+    AggSendStepThree {
+        /// A Base58 secret key of the party signing
+        #[structopt(parse(try_from_str = parse_keypair_bs58))]
+        keypair: Keypair,
+        /// The amount of SOL you want to send.
+        amount: f64,
+        /// Address of the recipient
+        to: Pubkey,
+        /// Add a memo to the transaction
+        memo: Option<String>,
+        /// A hash of a recent block, can be obtained by calling `recent-block-hash`, all parties *must* pass in the same hash.
+        recent_block_hash: Hash,
+        /// List of addresses that are part of this
+        keys: Vec<Pubkey>,
+        /// A list of all the first messages received in step 2
+        second_messages: Vec<String>,
+        /// The secret state received in step 2.
         secret_state: String,
     },
 }

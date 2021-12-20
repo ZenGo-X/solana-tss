@@ -15,6 +15,7 @@ pub enum Error {
     SerializationFailed(bincode::Error),
     DeserializationHexFailed { error: hex::FromHexError, field_name: &'static str },
     DeserializationBincodeFailed { error: bincode::Error, field_name: &'static str },
+    MismatchMessages,
 }
 
 impl Display for Error {
@@ -37,6 +38,7 @@ impl Display for Error {
             Self::DeserializationBincodeFailed { error, field_name } => {
                 write!(f, "Failed deserializing {}: {}", field_name, error)
             }
+            Self::MismatchMessages => write!(f, "There is a mismatch between first_messages and second_messages"),
         }
     }
 }

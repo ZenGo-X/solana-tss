@@ -1,15 +1,18 @@
 use bincode::Options as _;
-use curv::elliptic::curves::Point;
-use multi_party_eddsa::protocols::aggsig::SignFirstMsg;
+use curv::cryptographic_primitives::commitments::hash_commitment::HashCommitment;
+use curv::cryptographic_primitives::commitments::traits::Commitment;
+use curv::elliptic::curves::{Ed25519, Point, Scalar};
 use multi_party_eddsa::protocols::{
     aggsig::{self, KeyAgg},
     ExpendedKeyPair,
 };
 use rand::thread_rng;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
+use solana_sdk::signature::{Signature, SignerError};
 use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{native_token, signature::Signer, system_instruction};
@@ -49,17 +52,7 @@ fn main() -> Result<(), Error> {
         }
         Options::SendSingle { keypair, amount, to, net, memo } => {
             let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
-            let amount = native_token::sol_to_lamports(amount);
-            let transfer_ins = system_instruction::transfer(&keypair.pubkey(), &to, amount);
-            let msg = match memo {
-                None => Message::new(&[transfer_ins], Some(&keypair.pubkey())),
-                Some(memo) => {
-                    let memo_ins =
-                        Instruction { program_id: spl_memo::id(), accounts: Vec::new(), data: memo.into_bytes() };
-                    Message::new(&[transfer_ins, memo_ins], Some(&keypair.pubkey()))
-                }
-            };
-            let mut tx = Transaction::new_unsigned(msg);
+            let mut tx = create_unsigned_transaction(amount, &to, memo, &keypair.pubkey());
             let recent_hash = rpc_client.get_latest_blockhash().map_err(Error::RecentHashFailed)?;
             tx.sign(&[&keypair], recent_hash);
             let sig = rpc_client.send_transaction(&tx).map_err(Error::SendTransactionFailed)?;
@@ -84,57 +77,189 @@ fn main() -> Result<(), Error> {
             let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
             // we don't really need to pass a message here.
             let (ephemeral, first_msg, second_msg) = aggsig::create_ephemeral_key_and_commit(&extended_kepair, &[]);
-            let bincode = bincode::DefaultOptions::new().with_varint_encoding();
-            println!("Message 1, send to all other parties: {}", hex::encode(bincode.serialize(&first_msg)?));
+            let first_msg = AggMessage1 { sender: keypair.pubkey(), msg: first_msg };
+            println!("Message 1, send to all other parties: {}", serialize(first_msg)?);
 
             let secret = SecretAggStepOne { ephemeral, second_msg };
 
             println!(
                 "Secret state: keep this a secret, and pass it back to `agg-send-step-two`: {}",
-                hex::encode(bincode.serialize(&secret)?)
+                serialize(secret)?
             );
         }
-        Options::AggSendStepTwo { first_messages, secret_state } => {
-            let bincode = bincode::DefaultOptions::new().with_varint_encoding();
+        Options::AggSendStepTwo { keypair, first_messages, secret_state } => {
             let first_messages = first_messages
                 .into_iter()
-                .map(|msg| {
-                    let hex_decoded = hex::decode(msg)
-                        .map_err(|error| Error::DeserializationHexFailed { error, field_name: "first_messages" })?;
-                    bincode
-                        .deserialize(&hex_decoded)
-                        .map_err(|error| Error::DeserializationBincodeFailed { error, field_name: "first_messages" })
-                })
+                .map(|msg| deserialize(msg, "first_messages"))
                 .collect::<Result<Vec<_>, _>>()?;
-            let secret_state_bytes = hex::decode(secret_state)
-                .map_err(|error| Error::DeserializationHexFailed { error, field_name: "secret_state" })?;
-            let secret_state: SecretAggStepOne = bincode
-                .deserialize(&secret_state_bytes)
-                .map_err(|error| Error::DeserializationBincodeFailed { error, field_name: "secret_state" })?;
+            let secret_state: SecretAggStepOne = deserialize(secret_state, "secret_state")?;
 
-            println!(
-                "Message 2, send to all other parties: {}",
-                hex::encode(bincode.serialize(&secret_state.second_msg)?)
-            );
-
-            let secret = SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages };
+            let serialized_second_msg =
+                serialize(AggMessage2 { sender: keypair.pubkey(), msg: secret_state.second_msg })?;
+            let serialized_secret = serialize(SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages })?;
+            println!("Message 2, send to all other parties: {}", serialized_second_msg);
             println!(
                 "Secret state: keep this a secret, and pass it back to `agg-send-step-three`: {}",
-                hex::encode(bincode.serialize(&secret)?)
+                serialized_secret
             );
+        }
+        Options::AggSendStepThree {
+            keypair,
+            amount,
+            to,
+            memo,
+            recent_block_hash,
+            mut keys,
+            second_messages,
+            secret_state,
+        } => {
+            let second_messages = second_messages
+                .into_iter()
+                .map(|msg| deserialize(msg, "second_messages"))
+                .collect::<Result<Vec<AggMessage2>, _>>()?;
+            let secret_state: SecretAggStepTwo = deserialize(secret_state, "secret_state")?;
+
+            let commitments_are_valid = secret_state.first_messages.into_iter().all(|msg1| {
+                second_messages
+                    .iter()
+                    .find(|msg2| msg1.sender == msg2.sender)
+                    .map(|msg2| msg1.verify_commitment(msg2))
+                    .unwrap_or(false)
+            });
+            if !commitments_are_valid {
+                return Err(Error::MismatchMessages);
+            }
+
+            let all_nonces: Vec<_> = second_messages.iter().map(|msg2| msg2.msg.R.clone()).collect();
+            let combined_nonce = aggsig::get_R_tot(&all_nonces);
+
+            keys.sort(); // The order of the keys matter for the aggregate key
+            let keys: Vec<_> = keys
+                .into_iter()
+                .map(|key| {
+                    Point::from_bytes(&key.to_bytes()).expect("Should never fail, as these are valid ed25519 pubkeys")
+                })
+                .collect();
+            let aggkey = KeyAgg::key_aggregation_n(&keys, 0);
+            let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
+            let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
+
+            let mut tx = create_unsigned_transaction(amount, &to, memo, &aggpubkey);
+
+            let signer = PartialSigner {
+                single_nonce: secret_state.ephemeral.r,
+                combined_nonce,
+                extended_kepair,
+                coefficient: aggkey.hash,
+                combined_pubkey: aggkey.apk,
+            };
+            tx.sign(&[&signer], recent_block_hash);
+            let sig = tx.signatures[0];
+
+            println!("partial signature: {}", serialize(PartialSignature(sig))?);
         }
     }
     Ok(())
 }
+
+fn create_unsigned_transaction(amount: f64, to: &Pubkey, memo: Option<String>, payer: &Pubkey) -> Transaction {
+    let amount = native_token::sol_to_lamports(amount);
+    let transfer_ins = system_instruction::transfer(payer, to, amount);
+    let msg = match memo {
+        None => Message::new(&[transfer_ins], Some(payer)),
+        Some(memo) => {
+            let memo_ins = Instruction { program_id: spl_memo::id(), accounts: Vec::new(), data: memo.into_bytes() };
+            Message::new(&[transfer_ins, memo_ins], Some(payer))
+        }
+    };
+    Transaction::new_unsigned(msg)
+}
+
+struct PartialSigner {
+    single_nonce: Scalar<Ed25519>,
+    combined_nonce: Point<Ed25519>,
+    extended_kepair: ExpendedKeyPair,
+    coefficient: Scalar<Ed25519>,
+    combined_pubkey: Point<Ed25519>,
+}
+
+impl Signer for PartialSigner {
+    fn try_pubkey(&self) -> Result<Pubkey, SignerError> {
+        Ok(Pubkey::new(&*self.combined_pubkey.to_bytes(true)))
+    }
+
+    fn try_sign_message(&self, message: &[u8]) -> Result<Signature, SignerError> {
+        let sig = aggsig::partial_sign(
+            &self.single_nonce,
+            &self.extended_kepair,
+            &self.coefficient,
+            &self.combined_nonce,
+            &self.combined_pubkey,
+            message,
+        );
+        let mut sig_bytes = [0u8; 64];
+        sig_bytes[..32].copy_from_slice(&*sig.R.to_bytes(true));
+        sig_bytes[32..].copy_from_slice(&sig.s.to_bytes());
+        Ok(Signature::new(&sig_bytes))
+    }
+
+    fn is_interactive(&self) -> bool {
+        false
+    }
+}
+
+fn serialize<T: AllowedSerialize>(t: T) -> Result<String, Error> {
+    Ok(bincode::DefaultOptions::new().with_varint_encoding().serialize(&t).map(hex::encode)?)
+}
+
+fn deserialize<T: AllowedSerialize>(t: String, field_name: &'static str) -> Result<T, Error> {
+    let hex_decoded = hex::decode(t).map_err(|error| Error::DeserializationHexFailed { error, field_name })?;
+    bincode::DefaultOptions::new()
+        .with_varint_encoding()
+        .deserialize(&hex_decoded)
+        .map_err(|error| Error::DeserializationBincodeFailed { error, field_name })
+}
+
+trait AllowedSerialize: Serialize + DeserializeOwned {}
+
+#[derive(Serialize, Deserialize)]
+struct AggMessage1 {
+    msg: aggsig::SignFirstMsg,
+    sender: Pubkey,
+}
+impl AggMessage1 {
+    fn verify_commitment(&self, msg2: &AggMessage2) -> bool {
+        HashCommitment::<sha2::Sha512>::create_commitment_with_user_defined_randomness(
+            &msg2.msg.R.y_coord().expect("All ed25519 points have a y coordinate"),
+            &msg2.msg.blind_factor,
+        ) == self.msg.commitment
+    }
+}
+impl AllowedSerialize for AggMessage1 {}
+
+#[derive(Serialize, Deserialize)]
+struct AggMessage2 {
+    msg: aggsig::SignSecondMsg,
+    sender: Pubkey,
+}
+
+impl AllowedSerialize for AggMessage2 {}
+
+#[derive(Serialize, Deserialize)]
+struct PartialSignature(Signature);
+
+impl AllowedSerialize for PartialSignature {}
 
 #[derive(Serialize, Deserialize)]
 struct SecretAggStepOne {
     ephemeral: aggsig::EphemeralKey,
     second_msg: aggsig::SignSecondMsg,
 }
+impl AllowedSerialize for SecretAggStepOne {}
 
 #[derive(Serialize, Deserialize)]
 struct SecretAggStepTwo {
     ephemeral: aggsig::EphemeralKey,
-    first_messages: Vec<SignFirstMsg>,
+    first_messages: Vec<AggMessage1>,
 }
+impl AllowedSerialize for SecretAggStepTwo {}

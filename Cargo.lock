@@ -3151,6 +3151,7 @@ dependencies = [
  "multi-party-eddsa",
  "rand 0.7.3",
  "serde",
+ "sha2 0.9.8",
  "solana-client",
  "solana-sdk",
  "spl-memo",
