@@ -1,10 +1,12 @@
 use bincode::Options as _;
+use curv::arithmetic::Samplable;
+use curv::BigInt;
 use curv::cryptographic_primitives::commitments::hash_commitment::HashCommitment;
 use curv::cryptographic_primitives::commitments::traits::Commitment;
 use curv::elliptic::curves::{Ed25519, Point, Scalar};
 use multi_party_eddsa::protocols::{
     aggsig::{self, KeyAgg},
-    ExpendedKeyPair,
+    ExpendedKeyPair, Signature as AggSiggSignature,
 };
 use rand::thread_rng;
 use serde::de::DeserializeOwned;
@@ -157,6 +159,46 @@ fn main() -> Result<(), Error> {
             let sig = tx.signatures[0];
 
             println!("partial signature: {}", serialize(PartialSignature(sig))?);
+        }
+        Options::AggregateSignaturesAndBroadcast { signatures, amount, to, memo, recent_block_hash, net, mut keys } => {
+            keys.sort(); // The order of the keys matter for the aggregate key
+            let keys: Vec<_> = keys
+                .into_iter()
+                .map(|key| {
+                    Point::from_bytes(&key.to_bytes()).expect("Should never fail, as these are valid ed25519 pubkeys")
+                })
+                .collect();
+            let aggkey = KeyAgg::key_aggregation_n(&keys, 0);
+            let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
+
+            let partial_sigs = signatures
+                .into_iter()
+                .map(|s| deserialize::<PartialSignature>(s, "signatures"))
+                .map(|s| {
+                    s.map(|s| AggSiggSignature {
+                        R: Point::from_bytes(&s.0.as_ref()[..32]).unwrap(),
+                        s: Scalar::from_bytes(&s.0.as_ref()[32..]).unwrap(),
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let full_sig = aggsig::add_signature_parts(&partial_sigs);
+            let mut sig_bytes = [0u8; 64];
+            sig_bytes[..32].copy_from_slice(&*full_sig.R.to_bytes(true));
+            sig_bytes[32..].copy_from_slice(&full_sig.s.to_bytes());
+
+            let sig = Signature::new(&sig_bytes);
+            let mut tx = create_unsigned_transaction(amount, &to, memo, &aggpubkey);
+
+            tx.signatures.push(sig);
+            if tx.verify().is_err() {
+                return Err(Error::InvalidSignature);
+            }
+            println!("Transaction ID: {}", sig);
+            let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
+            rpc_client
+                .confirm_transaction_with_spinner(&sig, &recent_block_hash, rpc_client.commitment())
+                .map_err(Error::ConfirmingTransactionFailed)?;
         }
     }
     Ok(())
