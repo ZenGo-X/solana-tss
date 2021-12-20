@@ -14,39 +14,46 @@ pub enum Options {
     /// Check the balance of an address.
     Balance {
         /// The address to check the balance of
+        #[structopt(long)]
         address: Pubkey,
         /// Choose the desired netwrok: Mainnet/Testnet/Devnet
-        #[structopt(default_value = "testnet")]
+        #[structopt(default_value = "testnet", long)]
         net: Network,
     },
     /// Request an airdrop from a faucet.
     Airdrop {
         /// Address of the recipient
+        #[structopt(long)]
         to: Pubkey,
         /// The amount of SOL you want to send.
+        #[structopt(long)]
         amount: f64,
         /// Choose the desired netwrok: Mainnet/Testnet/Devnet
-        #[structopt(default_value = "testnet")]
+        #[structopt(default_value = "testnet", long)]
         net: Network,
     },
     /// Send a transaction using a single private key.
     SendSingle {
         /// A Base58 secret key
-        #[structopt(parse(try_from_str = parse_keypair_bs58))]
+        #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
         keypair: Keypair,
         /// The amount of SOL you want to send.
+        #[structopt(long)]
         amount: f64,
         /// Address of the recipient
+        #[structopt(long)]
         to: Pubkey,
         /// Choose the desired netwrok: Mainnet/Testnet/Devnet
-        #[structopt(default_value = "testnet")]
+        #[structopt(default_value = "testnet", long)]
         net: Network,
         /// Add a memo to the transaction
+        #[structopt(long)]
         memo: Option<String>,
     },
     /// Aggregate a list of addresses into a single address that they can all sign on together
     AggregateKeys {
         /// List of addresses
+        #[structopt(min_values=2)]
         keys: Vec<Pubkey>,
     },
     /// Start aggregate signing
