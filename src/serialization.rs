@@ -15,6 +15,43 @@ pub enum Error {
     BadBase58(bs58::decode::Error),
     InvalidPoint(PointFromBytesError),
     InvalidScalar(DeserializationError),
+    WrongTag { expected: Tag, found: Tag },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tag {
+    AggMessage1 = 0,
+    AggMessage2 = 1,
+    PartialSignature = 2,
+    SecretAggStepOne = 3,
+    SecretAggStepTwo = 4,
+    Unknown,
+}
+
+impl From<u8> for Tag {
+    fn from(t: u8) -> Self {
+        match t {
+            _ if t == Tag::AggMessage1 as u8 => Tag::AggMessage1,
+            _ if t == Tag::AggMessage2 as u8 => Tag::AggMessage2,
+            _ if t == Tag::PartialSignature as u8 => Tag::PartialSignature,
+            _ if t == Tag::SecretAggStepOne as u8 => Tag::SecretAggStepOne,
+            _ if t == Tag::SecretAggStepTwo as u8 => Tag::SecretAggStepTwo,
+            _ => Tag::Unknown,
+        }
+    }
+}
+
+impl Display for Tag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Tag::AggMessage1 => f.write_str("Aggregate Message1"),
+            Tag::AggMessage2 => f.write_str("Aggregate Message2"),
+            Tag::PartialSignature => f.write_str("Partial Signature"),
+            Tag::SecretAggStepOne => f.write_str("Secret State Aggregate1"),
+            Tag::SecretAggStepTwo => f.write_str("Secret State Aggregate2"),
+            Tag::Unknown => f.write_str("Unknown"),
+        }
+    }
 }
 
 impl Display for Error {
@@ -26,6 +63,9 @@ impl Display for Error {
             Self::BadBase58(e) => write!(f, "Invalid base58: {}", e),
             Self::InvalidPoint(e) => write!(f, "Invalid Ed25519 Point: {}", e),
             Self::InvalidScalar(e) => write!(f, "Invalid Ed25519 Scalar: {}", e),
+            Self::WrongTag { expected, found } => {
+                write!(f, "Expected to find message: {}, instead found: {}", expected, found)
+            }
         }
     }
 }
@@ -83,21 +123,26 @@ impl AggMessage1 {
 
 impl Serialize for AggMessage1 {
     fn serialize(&self, append_to: &mut Vec<u8>) {
-        append_to.reserve(self.size_hint());
+        append_to.reserve(self.size_hint() + 1);
+        append_to.push(Tag::AggMessage1 as u8);
         let c_bytes = self.msg.commitment.to_bytes_array::<64>().expect("Should fit in 64 bytes");
         append_to.extend(c_bytes);
         append_to.extend(self.sender.as_ref());
     }
     fn deserialize(b: &[u8]) -> Result<Self, Error> {
-        if b.len() < 64 + 32 {
-            return Err(Error::InputTooShort { expected: 64 + 32, found: b.len() });
+        if b.len() < 1 + 64 + 32 {
+            return Err(Error::InputTooShort { expected: 1 + 64 + 32, found: b.len() });
         }
-        let commitment = BigInt::from_bytes(&b[..64]);
-        let sender = Pubkey::new(&b[64..64 + 32]);
+        let tag = Tag::from(b[0]);
+        if tag != Tag::AggMessage1 {
+            return Err(Error::WrongTag { expected: Tag::AggMessage1, found: tag });
+        }
+        let commitment = BigInt::from_bytes(&b[1..64 + 1]);
+        let sender = Pubkey::new(&b[64 + 1..64 + 32 + 1]);
         Ok(Self { msg: SignFirstMsg { commitment }, sender })
     }
     fn size_hint(&self) -> usize {
-        64 + 32
+        1 + 64 + 32
     }
 }
 
@@ -110,22 +155,28 @@ pub struct AggMessage2 {
 impl Serialize for AggMessage2 {
     fn serialize(&self, append_to: &mut Vec<u8>) {
         append_to.reserve(self.size_hint());
+        append_to.push(Tag::AggMessage2 as u8);
+
         append_to.extend(&*self.msg.R.to_bytes(true));
         let blind_bytes = self.msg.blind_factor.to_bytes_array::<64>().expect("Should fit in 64 bytes");
         append_to.extend(&blind_bytes);
         append_to.extend(self.sender.as_ref());
     }
     fn deserialize(b: &[u8]) -> Result<Self, Error> {
-        if b.len() < 32 + 64 + 32 {
-            return Err(Error::InputTooShort { expected: 32 + 64 + 32, found: b.len() });
+        if b.len() < 1 + 32 + 64 + 32 {
+            return Err(Error::InputTooShort { expected: 1 + 32 + 64 + 32, found: b.len() });
         }
-        let msg_nonce = Point::from_bytes(&b[..32])?;
-        let blind_factor = BigInt::from_bytes(&b[32..32 + 64]);
-        let sender = Pubkey::new(&b[32 + 64..]);
+        let tag = Tag::from(b[0]);
+        if tag != Tag::AggMessage2 {
+            return Err(Error::WrongTag { expected: Tag::AggMessage2, found: tag });
+        }
+        let msg_nonce = Point::from_bytes(&b[1..32 + 1])?;
+        let blind_factor = BigInt::from_bytes(&b[1 + 32..32 + 64 + 1]);
+        let sender = Pubkey::new(&b[1 + 32 + 64..1 + 32 + 64 + 32]);
         Ok(Self { sender, msg: SignSecondMsg { R: msg_nonce, blind_factor } })
     }
     fn size_hint(&self) -> usize {
-        32 + 64 + 32
+        1 + 32 + 64 + 32
     }
 }
 
@@ -135,16 +186,22 @@ pub struct PartialSignature(pub Signature);
 impl Serialize for PartialSignature {
     fn serialize(&self, append_to: &mut Vec<u8>) {
         append_to.reserve(self.size_hint());
+        append_to.push(Tag::PartialSignature as u8);
+
         append_to.extend(self.0.as_ref());
     }
     fn deserialize(b: &[u8]) -> Result<Self, Error> {
-        if b.len() < 64 {
-            return Err(Error::InputTooShort { expected: 64, found: b.len() });
+        if b.len() < 1 + 64 {
+            return Err(Error::InputTooShort { expected: 1 + 64, found: b.len() });
         }
-        Ok(PartialSignature(Signature::new(&b[..64])))
+        let tag = Tag::from(b[0]);
+        if tag != Tag::PartialSignature {
+            return Err(Error::WrongTag { expected: Tag::PartialSignature, found: tag });
+        }
+        Ok(PartialSignature(Signature::new(&b[1..1 + 64])))
     }
     fn size_hint(&self) -> usize {
-        64
+        1 + 64
     }
 }
 
@@ -165,26 +222,33 @@ impl PartialEq for SecretAggStepOne {
 impl Serialize for SecretAggStepOne {
     fn serialize(&self, append_to: &mut Vec<u8>) {
         append_to.reserve(self.size_hint());
+        append_to.push(Tag::SecretAggStepOne as u8);
+
         append_to.extend(&*self.ephemeral.r.to_bytes());
         append_to.extend(&*self.ephemeral.R.to_bytes(true));
         append_to.extend(&*self.second_msg.R.to_bytes(true));
         append_to.extend(&self.second_msg.blind_factor.to_bytes_array::<64>().expect("blind factor is 512 bits"));
     }
     fn deserialize(b: &[u8]) -> Result<Self, Error> {
-        if b.len() < 32 + 32 + 32 + 64 {
-            return Err(Error::InputTooShort { expected: 32 + 32 + 32 + 64, found: b.len() });
+        if b.len() < 1 + 32 + 32 + 32 + 64 {
+            return Err(Error::InputTooShort { expected: 1 + 32 + 32 + 32 + 64, found: b.len() });
         }
-        let r = Scalar::from_bytes(&b[..32])?;
-        let ephemeral_nonce = Point::from_bytes(&b[32..64])?;
-        let second_msg_nonce = Point::from_bytes(&b[64..64 + 32])?;
-        let blind_factor = BigInt::from_bytes(&b[64 + 32..]);
+
+        let tag = Tag::from(b[0]);
+        if tag != Tag::SecretAggStepOne {
+            return Err(Error::WrongTag { expected: Tag::SecretAggStepOne, found: tag });
+        }
+        let r = Scalar::from_bytes(&b[1..1 + 32])?;
+        let ephemeral_nonce = Point::from_bytes(&b[1 + 32..1 + 64])?;
+        let second_msg_nonce = Point::from_bytes(&b[1 + 64..1 + 64 + 32])?;
+        let blind_factor = BigInt::from_bytes(&b[1 + 64 + 32..1 + 64 + 32 + 64]);
         Ok(Self {
             second_msg: SignSecondMsg { R: second_msg_nonce, blind_factor },
             ephemeral: EphemeralKey { R: ephemeral_nonce, r },
         })
     }
     fn size_hint(&self) -> usize {
-        32 + 32 + 32 + 64
+        1 + 32 + 32 + 32 + 64
     }
 }
 
@@ -205,6 +269,8 @@ impl PartialEq for SecretAggStepTwo {
 impl Serialize for SecretAggStepTwo {
     fn serialize(&self, append_to: &mut Vec<u8>) {
         append_to.reserve(self.size_hint());
+        append_to.push(Tag::SecretAggStepTwo as u8);
+
         append_to.extend(&*self.ephemeral.r.to_bytes());
         append_to.extend(&*self.ephemeral.R.to_bytes(true));
         append_to.extend((self.first_messages.len() as u64).to_le_bytes());
@@ -215,18 +281,19 @@ impl Serialize for SecretAggStepTwo {
         println!("{:?}", append_to);
     }
     fn deserialize(mut b: &[u8]) -> Result<Self, Error> {
-        let mut expected_len = 32 + 32 + 8;
-        if b.len() < 32 + 32 + 8 {
+        let mut expected_len = 1 + 32 + 32 + 8;
+        if b.len() < expected_len {
             return Err(Error::InputTooShort { expected: expected_len, found: b.len() });
         }
-        let ephemeral_nonce = Scalar::from_bytes(&b[..32])?;
-        let ephemeral_public_nonce = Point::from_bytes(&b[32..64])?;
-        let len_first_messages = u64::from_le_bytes((&b[64..64 + 8]).try_into().expect("Exactly 8 bytes")) as usize;
+        let ephemeral_nonce = Scalar::from_bytes(&b[1..1 + 32])?;
+        let ephemeral_public_nonce = Point::from_bytes(&b[1 + 32..1 + 64])?;
+        let len_first_messages =
+            u64::from_le_bytes((&b[1 + 64..1 + 64 + 8]).try_into().expect("Exactly 8 bytes")) as usize;
         expected_len += len_first_messages * (64 + 32);
         if b.len() < expected_len {
             return Err(Error::InputTooShort { expected: expected_len, found: b.len() });
         }
-        b = &b[64 + 8..];
+        b = &b[1 + 64 + 8..];
         let first_messages: Vec<_> = (0..len_first_messages)
             .map(|i| {
                 let slice = &b[i * (64 + 32)..];
@@ -238,7 +305,7 @@ impl Serialize for SecretAggStepTwo {
         Ok(Self { first_messages, ephemeral: EphemeralKey { R: ephemeral_public_nonce, r: ephemeral_nonce } })
     }
     fn size_hint(&self) -> usize {
-        32 + 32 + 8 + self.first_messages.len() * (64 + 32)
+        1 + 32 + 32 + 8 + self.first_messages.len() * (64 + 32)
     }
 }
 
