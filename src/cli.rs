@@ -53,7 +53,7 @@ pub enum Options {
     /// Aggregate a list of addresses into a single address that they can all sign on together
     AggregateKeys {
         /// List of addresses
-        #[structopt(min_values=2)]
+        #[structopt(min_values = 2)]
         keys: Vec<Pubkey>,
     },
     /// Start aggregate signing
@@ -68,10 +68,10 @@ pub enum Options {
         #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
         keypair: Keypair,
         /// A list of all the first messages received in step 1
-        #[structopt(long, min_values=1, empty_values=false)]
+        #[structopt(long, min_values = 1, empty_values = false)]
         first_messages: Vec<String>,
         /// The secret state received in step 1.
-        #[structopt(long, empty_values=false)]
+        #[structopt(long, empty_values = false)]
         secret_state: String,
     },
     /// Step 3 of aggregate signing, you should pass in the secret data from step 2.
@@ -93,18 +93,18 @@ pub enum Options {
         #[structopt(long)]
         recent_block_hash: Hash,
         /// List of addresses that are part of this
-        #[structopt(long, min_values=2)]
+        #[structopt(long, min_values = 2)]
         keys: Vec<Pubkey>,
         /// A list of all the first messages received in step 2
-        #[structopt(long, min_values=1, empty_values=false)]
+        #[structopt(long, min_values = 1, empty_values = false)]
         second_messages: Vec<String>,
         /// The secret state received in step 2.
-        #[structopt(long, empty_values=false)]
+        #[structopt(long, empty_values = false)]
         secret_state: String,
     },
     AggregateSignaturesAndBroadcast {
         // A list of all partial signatures produced in step three.
-        #[structopt(long, min_values=2, empty_values=false)]
+        #[structopt(long, min_values = 2, empty_values = false)]
         signatures: Vec<String>,
         /// The amount of SOL you want to send.
         #[structopt(long)]
@@ -113,7 +113,7 @@ pub enum Options {
         #[structopt(long)]
         to: Pubkey,
         /// Add a memo to the transaction
-        #[structopt(long, empty_values=false)]
+        #[structopt(long, empty_values = false)]
         memo: Option<String>,
         /// A hash of a recent block, can be obtained by calling `recent-block-hash`, all parties *must* pass in the same hash.
         #[structopt(long)]
@@ -123,7 +123,7 @@ pub enum Options {
         #[structopt(default_value = "testnet", long)]
         net: Network,
         /// List of addresses
-        #[structopt(long, min_values=2)]
+        #[structopt(long, min_values = 2)]
         keys: Vec<Pubkey>,
     },
 }

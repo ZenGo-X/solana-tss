@@ -1,16 +1,9 @@
-use bincode::Options as _;
-use curv::arithmetic::Samplable;
-use curv::BigInt;
-use curv::cryptographic_primitives::commitments::hash_commitment::HashCommitment;
-use curv::cryptographic_primitives::commitments::traits::Commitment;
 use curv::elliptic::curves::{Ed25519, Point, Scalar};
 use multi_party_eddsa::protocols::{
     aggsig::{self, KeyAgg},
     ExpendedKeyPair, Signature as AggSiggSignature,
 };
 use rand::thread_rng;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
@@ -23,9 +16,13 @@ use structopt::StructOpt;
 
 use crate::cli::Options;
 use crate::error::Error;
+use crate::serialization::{
+    AggMessage1, AggMessage2, FieldError, PartialSignature, SecretAggStepOne, SecretAggStepTwo, Serialize,
+};
 
 mod cli;
 mod error;
+mod serialization;
 
 fn main() -> Result<(), Error> {
     let opts = Options::from_args();
@@ -80,25 +77,26 @@ fn main() -> Result<(), Error> {
             // we don't really need to pass a message here.
             let (ephemeral, first_msg, second_msg) = aggsig::create_ephemeral_key_and_commit(&extended_kepair, &[]);
             let first_msg = AggMessage1 { sender: keypair.pubkey(), msg: first_msg };
-            println!("Message 1, send to all other parties: {}", serialize(first_msg)?);
+            println!("Message 1, send to all other parties: {}", first_msg.serialize_bs58());
 
             let secret = SecretAggStepOne { ephemeral, second_msg };
 
             println!(
                 "Secret state: keep this a secret, and pass it back to `agg-send-step-two`: {}",
-                serialize(secret)?
+                secret.serialize_bs58()
             );
         }
         Options::AggSendStepTwo { keypair, first_messages, secret_state } => {
             let first_messages = first_messages
                 .into_iter()
-                .map(|msg| deserialize(msg, "first_messages"))
+                .map(|msg| AggMessage1::deserialize_bs58(msg).with_field("first_message"))
                 .collect::<Result<Vec<_>, _>>()?;
-            let secret_state: SecretAggStepOne = deserialize(secret_state, "secret_state")?;
+            let secret_state = SecretAggStepOne::deserialize_bs58(&secret_state).with_field("secret_state")?;
 
             let serialized_second_msg =
-                serialize(AggMessage2 { sender: keypair.pubkey(), msg: secret_state.second_msg })?;
-            let serialized_secret = serialize(SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages })?;
+                AggMessage2 { sender: keypair.pubkey(), msg: secret_state.second_msg }.serialize_bs58();
+            let serialized_secret =
+                SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages }.serialize_bs58();
             println!("Message 2, send to all other parties: {}", serialized_second_msg);
             println!(
                 "Secret state: keep this a secret, and pass it back to `agg-send-step-three`: {}",
@@ -117,9 +115,10 @@ fn main() -> Result<(), Error> {
         } => {
             let second_messages = second_messages
                 .into_iter()
-                .map(|msg| deserialize(msg, "second_messages"))
-                .collect::<Result<Vec<AggMessage2>, _>>()?;
-            let secret_state: SecretAggStepTwo = deserialize(secret_state, "secret_state")?;
+                .map(|msg| AggMessage2::deserialize_bs58(&msg).with_field("second_messages"))
+                .collect::<Result<Vec<_>, _>>()?;
+            let secret_state: SecretAggStepTwo =
+                SecretAggStepTwo::deserialize_bs58(secret_state).with_field("secret_state")?;
 
             let commitments_are_valid = secret_state.first_messages.into_iter().all(|msg1| {
                 second_messages
@@ -158,7 +157,7 @@ fn main() -> Result<(), Error> {
             tx.sign(&[&signer], recent_block_hash);
             let sig = tx.signatures[0];
 
-            println!("partial signature: {}", serialize(PartialSignature(sig))?);
+            println!("partial signature: {}", PartialSignature(sig).serialize_bs58());
         }
         Options::AggregateSignaturesAndBroadcast { signatures, amount, to, memo, recent_block_hash, net, mut keys } => {
             keys.sort(); // The order of the keys matter for the aggregate key
@@ -173,7 +172,7 @@ fn main() -> Result<(), Error> {
 
             let partial_sigs = signatures
                 .into_iter()
-                .map(|s| deserialize::<PartialSignature>(s, "signatures"))
+                .map(|s| PartialSignature::deserialize_bs58(s).with_field("signatures"))
                 .map(|s| {
                     s.map(|s| AggSiggSignature {
                         R: Point::from_bytes(&s.0.as_ref()[..32]).unwrap(),
@@ -249,59 +248,3 @@ impl Signer for PartialSigner {
         false
     }
 }
-
-fn serialize<T: AllowedSerialize>(t: T) -> Result<String, Error> {
-    Ok(bincode::DefaultOptions::new().with_varint_encoding().serialize(&t).map(hex::encode)?)
-}
-
-fn deserialize<T: AllowedSerialize>(t: String, field_name: &'static str) -> Result<T, Error> {
-    let hex_decoded = hex::decode(t).map_err(|error| Error::DeserializationHexFailed { error, field_name })?;
-    bincode::DefaultOptions::new()
-        .with_varint_encoding()
-        .deserialize(&hex_decoded)
-        .map_err(|error| Error::DeserializationBincodeFailed { error, field_name })
-}
-
-trait AllowedSerialize: Serialize + DeserializeOwned {}
-
-#[derive(Serialize, Deserialize)]
-struct AggMessage1 {
-    msg: aggsig::SignFirstMsg,
-    sender: Pubkey,
-}
-impl AggMessage1 {
-    fn verify_commitment(&self, msg2: &AggMessage2) -> bool {
-        HashCommitment::<sha2::Sha512>::create_commitment_with_user_defined_randomness(
-            &msg2.msg.R.y_coord().expect("All ed25519 points have a y coordinate"),
-            &msg2.msg.blind_factor,
-        ) == self.msg.commitment
-    }
-}
-impl AllowedSerialize for AggMessage1 {}
-
-#[derive(Serialize, Deserialize)]
-struct AggMessage2 {
-    msg: aggsig::SignSecondMsg,
-    sender: Pubkey,
-}
-
-impl AllowedSerialize for AggMessage2 {}
-
-#[derive(Serialize, Deserialize)]
-struct PartialSignature(Signature);
-
-impl AllowedSerialize for PartialSignature {}
-
-#[derive(Serialize, Deserialize)]
-struct SecretAggStepOne {
-    ephemeral: aggsig::EphemeralKey,
-    second_msg: aggsig::SignSecondMsg,
-}
-impl AllowedSerialize for SecretAggStepOne {}
-
-#[derive(Serialize, Deserialize)]
-struct SecretAggStepTwo {
-    ephemeral: aggsig::EphemeralKey,
-    first_messages: Vec<AggMessage1>,
-}
-impl AllowedSerialize for SecretAggStepTwo {}

@@ -3143,14 +3143,11 @@ dependencies = [
 name = "solana-tss"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "bs58",
  "curv-kzen",
  "ed25519-dalek",
- "hex 0.4.3",
  "multi-party-eddsa",
  "rand 0.7.3",
- "serde",
  "sha2 0.9.8",
  "solana-client",
  "solana-sdk",
