@@ -18,6 +18,8 @@ pub enum Error {
     WrongTag { expected: Tag, found: Tag },
 }
 
+// TODO: Also add a magic tag that is equal to all messages.
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tag {
     AggMessage1 = 0,
@@ -103,6 +105,7 @@ pub trait Serialize: Sized {
         let out = bs58::decode(s).into_vec().map_err(Error::BadBase58)?;
         Self::deserialize(&out)
     }
+    // TODO: Use a cursor instead, more fail safe.
     fn deserialize(b: &[u8]) -> Result<Self, Error>;
     fn size_hint(&self) -> usize;
 }
@@ -278,7 +281,6 @@ impl Serialize for SecretAggStepTwo {
             append_to.extend(&msg.msg.commitment.to_bytes_array::<64>().expect("The commitment is 512 bits"));
             append_to.extend(msg.sender.as_ref());
         }
-        println!("{:?}", append_to);
     }
     fn deserialize(mut b: &[u8]) -> Result<Self, Error> {
         let mut expected_len = 1 + 32 + 32 + 8;

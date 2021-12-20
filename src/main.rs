@@ -70,14 +70,14 @@ fn main() -> Result<(), Error> {
                 .collect();
             let aggkey = KeyAgg::key_aggregation_n(&keys, 0);
             let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
-            println!("The Aggregated PublicKey: {}", aggpubkey);
+            println!("The Aggregated Public Key: {}", aggpubkey);
         }
         Options::AggSendStepOne { keypair } => {
             let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
             // we don't really need to pass a message here.
             let (ephemeral, first_msg, second_msg) = aggsig::create_ephemeral_key_and_commit(&extended_kepair, &[]);
             let first_msg = AggMessage1 { sender: keypair.pubkey(), msg: first_msg };
-            println!("Message 1, send to all other parties: {}", first_msg.serialize_bs58());
+            println!("Message 1: {} (send to all other parties)", first_msg.serialize_bs58());
 
             let secret = SecretAggStepOne { ephemeral, second_msg };
 
@@ -97,9 +97,9 @@ fn main() -> Result<(), Error> {
                 AggMessage2 { sender: keypair.pubkey(), msg: secret_state.second_msg }.serialize_bs58();
             let serialized_secret =
                 SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages }.serialize_bs58();
-            println!("Message 2, send to all other parties: {}", serialized_second_msg);
+            println!("Message 2: {} (send to all other parties)", serialized_second_msg);
             println!(
-                "Secret state: keep this a secret, and pass it back to `agg-send-step-three`: {}",
+                "Secret state: {} (keep this a secret, and pass it back to `agg-send-step-three`:)",
                 serialized_secret
             );
         }
@@ -157,7 +157,7 @@ fn main() -> Result<(), Error> {
             tx.sign(&[&signer], recent_block_hash);
             let sig = tx.signatures[0];
 
-            println!("partial signature: {}", PartialSignature(sig).serialize_bs58());
+            println!("Partial signature: {}", PartialSignature(sig).serialize_bs58());
         }
         Options::AggregateSignaturesAndBroadcast { signatures, amount, to, memo, recent_block_hash, net, mut keys } => {
             keys.sort(); // The order of the keys matter for the aggregate key
