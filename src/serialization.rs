@@ -278,10 +278,7 @@ impl Serialize for SecretAggStepTwo {
         append_to.extend(&*self.ephemeral.r.to_bytes());
         append_to.extend(&*self.ephemeral.R.to_bytes(true));
         append_to.extend((self.first_messages.len() as u64).to_le_bytes());
-        for msg in &self.first_messages {
-            append_to.extend(&msg.msg.commitment.to_bytes_array::<64>().expect("The commitment is 512 bits"));
-            append_to.extend(msg.sender.as_ref());
-        }
+        self.first_messages.iter().for_each(|msg| msg.serialize(append_to));
     }
     fn deserialize(mut b: &[u8]) -> Result<Self, Error> {
         let mut expected_len = 1 + 32 + 32 + 8;
@@ -292,23 +289,21 @@ impl Serialize for SecretAggStepTwo {
         let ephemeral_public_nonce = Point::from_bytes(&b[1 + 32..1 + 64])?;
         let len_first_messages =
             u64::from_le_bytes((&b[1 + 64..1 + 64 + 8]).try_into().expect("Exactly 8 bytes")) as usize;
-        expected_len += len_first_messages * (64 + 32);
+        expected_len += len_first_messages * (64 + 32 + 1);
         if b.len() < expected_len {
             return Err(Error::InputTooShort { expected: expected_len, found: b.len() });
         }
         b = &b[1 + 64 + 8..];
         let first_messages: Vec<_> = (0..len_first_messages)
             .map(|i| {
-                let slice = &b[i * (64 + 32)..];
-                let commitment = BigInt::from_bytes(&slice[..64]);
-                let sender = Pubkey::new(&slice[64..64 + 32]);
-                AggMessage1 { msg: SignFirstMsg { commitment }, sender }
+                let slice = &b[i * (1 + 64 + 32)..];
+                AggMessage1::deserialize(slice)
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         Ok(Self { first_messages, ephemeral: EphemeralKey { R: ephemeral_public_nonce, r: ephemeral_nonce } })
     }
     fn size_hint(&self) -> usize {
-        1 + 32 + 32 + 8 + self.first_messages.len() * (64 + 32)
+        1 + 32 + 32 + 8 + self.first_messages.len() * (1 + 64 + 32)
     }
 }
 

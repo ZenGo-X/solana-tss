@@ -6,8 +6,10 @@ use solana_sdk::{hash::Hash, pubkey::Pubkey, transaction::Transaction};
 use crate::serialization::{AggMessage1, AggMessage2, PartialSignature, SecretAggStepOne, SecretAggStepTwo};
 use crate::{create_unsigned_transaction, Error};
 
+/// Create the aggregate public key, pass key=None if you don't care about the coefficient
 pub fn key_agg(mut keys: Vec<Pubkey>, key: Option<Pubkey>) -> Result<aggsig::KeyAgg, Error> {
     keys.sort(); // The order of the keys matter for the aggregate key
+    // Get the index of the specific key in the key list, so KeyAgg::hash will contain its coefficient
     let index = key.map(|k| keys.binary_search(&k)).unwrap_or(Ok(0)).map_err(|_| Error::KeyPairIsNotInKeys)?;
     let keys: Vec<_> = keys
         .into_iter()
@@ -16,6 +18,7 @@ pub fn key_agg(mut keys: Vec<Pubkey>, key: Option<Pubkey>) -> Result<aggsig::Key
     Ok(aggsig::KeyAgg::key_aggregation_n(&keys, index))
 }
 
+/// Generate Message1 which contains nonce, public nonce, and commitment to nonces
 pub fn step_one(keypair: Keypair) -> (AggMessage1, SecretAggStepOne) {
     let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
     // we don't really need to pass a message here.
@@ -24,6 +27,7 @@ pub fn step_one(keypair: Keypair) -> (AggMessage1, SecretAggStepOne) {
     (AggMessage1 { sender: keypair.pubkey(), msg: first_msg }, SecretAggStepOne { ephemeral, second_msg })
 }
 
+/// Make sure the user actually collected all the public nonce commitments
 pub fn step_two(
     keypair: Keypair,
     first_messages: Vec<AggMessage1>,
@@ -45,6 +49,7 @@ pub fn step_three(
     second_messages: Vec<AggMessage2>,
     secret_state: SecretAggStepTwo,
 ) -> Result<PartialSignature, Error> {
+    // Validate all the commitments recieved prior to the public nonces
     let commitments_are_valid = secret_state.first_messages.into_iter().all(|msg1| {
         second_messages
             .iter()
@@ -60,10 +65,12 @@ pub fn step_three(
         second_messages.iter().map(|msg2| msg2.msg.R.clone()).chain([secret_state.ephemeral.R]).collect();
     let combined_nonce = aggsig::get_R_tot(&all_nonces);
 
+    // Generate the aggregate key together with the coefficient of the current keypair
     let aggkey = key_agg(keys, Some(keypair.pubkey()))?;
     let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
     let extended_kepair = ExpendedKeyPair::create_from_private_key(keypair.secret().to_bytes());
 
+    // Create the unsigned transaction
     let mut tx = create_unsigned_transaction(amount, &to, memo, &aggpubkey);
 
     let signer = PartialSigner {
@@ -73,6 +80,7 @@ pub fn step_three(
         coefficient: aggkey.hash,
         combined_pubkey: aggkey.apk,
     };
+    // Sign the transaction using a custom `PartialSigner`, this is required to comply with Solana's API.
     tx.sign(&[&signer], recent_block_hash);
     let sig = tx.signatures[0];
     Ok(PartialSignature(sig))
@@ -97,17 +105,22 @@ pub fn sign_and_broadcast(
         })
         .collect();
 
+    // Add the signatures up
     let full_sig = aggsig::add_signature_parts(&partial_sigs);
+
     let mut sig_bytes = [0u8; 64];
     sig_bytes[..32].copy_from_slice(&*full_sig.R.to_bytes(true));
     sig_bytes[32..].copy_from_slice(&full_sig.s.to_bytes());
-
     let sig = Signature::new(&sig_bytes);
+
+    // Create the same transaction again
     let mut tx = create_unsigned_transaction(amount, &to, memo, &aggpubkey);
+    // Insert the recent_block_hash and the signature to the right places
     tx.message.recent_blockhash = recent_block_hash;
     assert_eq!(tx.signatures.len(), 1);
     tx.signatures[0] = sig;
 
+    // Make sure the resulting transaction is actually valid.
     if tx.verify().is_err() {
         return Err(Error::InvalidSignature);
     }
