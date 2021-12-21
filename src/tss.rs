@@ -56,7 +56,8 @@ pub fn step_three(
         return Err(Error::MismatchMessages);
     }
 
-    let all_nonces: Vec<_> = second_messages.iter().map(|msg2| msg2.msg.R.clone()).collect();
+    let all_nonces: Vec<_> =
+        second_messages.iter().map(|msg2| msg2.msg.R.clone()).chain([secret_state.ephemeral.R]).collect();
     let combined_nonce = aggsig::get_R_tot(&all_nonces);
 
     let aggkey = key_agg(keys, Some(keypair.pubkey()))?;
@@ -81,6 +82,7 @@ pub fn sign_and_broadcast(
     amount: f64,
     to: Pubkey,
     memo: Option<String>,
+    recent_block_hash: Hash,
     keys: Vec<Pubkey>,
     signatures: Vec<PartialSignature>,
 ) -> Result<Transaction, Error> {
@@ -102,8 +104,10 @@ pub fn sign_and_broadcast(
 
     let sig = Signature::new(&sig_bytes);
     let mut tx = create_unsigned_transaction(amount, &to, memo, &aggpubkey);
+    tx.message.recent_blockhash = recent_block_hash;
+    assert_eq!(tx.signatures.len(), 1);
+    tx.signatures[0] = sig;
 
-    tx.signatures.push(sig);
     if tx.verify().is_err() {
         return Err(Error::InvalidSignature);
     }
@@ -140,5 +144,90 @@ impl Signer for PartialSigner {
 
     fn is_interactive(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::native_token::lamports_to_sol;
+    use crate::serialization::Serialize;
+    use crate::tss::{key_agg, sign_and_broadcast, step_one, step_three, step_two};
+    use rand::thread_rng;
+    use solana_sdk::pubkey::Pubkey;
+    use solana_sdk::signature::{Keypair, Signer};
+    use solana_streamer::socket::SocketAddrSpace;
+    use solana_test_validator::TestValidator;
+
+    fn clone_keypair(k: &Keypair) -> Keypair {
+        Keypair::from_bytes(&k.to_bytes()).unwrap()
+    }
+    fn clone_serialize<T: Serialize>(t: &T) -> T {
+        let mut v = Vec::new();
+        t.serialize(&mut v);
+        T::deserialize(&v).unwrap()
+    }
+    #[test]
+    fn test_roundtrip() {
+        let n = 5;
+        let mut rng = thread_rng();
+        let keys: Vec<_> = (0..n).map(|_| Keypair::generate(&mut rng)).collect();
+        let pubkeys: Vec<_> = keys.iter().map(|k| k.pubkey()).collect();
+        // Key Generation
+        let aggpubkey = key_agg(pubkeys.clone(), None).unwrap().apk;
+        let aggpubkey_solana = Pubkey::new(&*aggpubkey.to_bytes(true));
+        let full_amount = 500_000_000;
+        // Get some money in it
+        let testnet = TestValidator::with_no_fees(aggpubkey_solana, None, SocketAddrSpace::Unspecified);
+        let rpc_client = testnet.get_rpc_client();
+
+        // step 1
+        let to = Keypair::generate(&mut rng);
+        let (first_msgs, first_secrets): (Vec<_>, Vec<_>) = keys.iter().map(clone_keypair).map(step_one).unzip();
+
+        // step 2
+        let (second_msgs, second_secrets): (Vec<_>, Vec<_>) = keys
+            .iter()
+            .map(clone_keypair)
+            .zip(first_secrets.into_iter())
+            .enumerate()
+            .map(|(i, (key, secret))| {
+                let mut first_msgs: Vec<_> = first_msgs.iter().map(clone_serialize).collect();
+                first_msgs.remove(i);
+                step_two(key, first_msgs, secret)
+            })
+            .unzip();
+
+        let recent_block_hash = rpc_client.get_latest_blockhash().unwrap();
+        // step 3
+        let amount = lamports_to_sol(full_amount / 2);
+        let memo = Some("test_roundtrip".to_string());
+
+        let partial_sigs: Vec<_> = keys
+            .iter()
+            .map(clone_keypair)
+            .zip(second_secrets.into_iter())
+            .enumerate()
+            .map(|(i, (key, secret))| {
+                let mut second_msgs: Vec<_> = second_msgs.iter().map(clone_serialize).collect();
+                second_msgs.remove(i);
+                step_three(
+                    key,
+                    amount,
+                    to.pubkey(),
+                    memo.clone(),
+                    recent_block_hash,
+                    pubkeys.clone(),
+                    second_msgs,
+                    secret,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        let full_tx = sign_and_broadcast(amount, to.pubkey(), memo, recent_block_hash, pubkeys, partial_sigs).unwrap();
+        let sig = rpc_client.send_transaction(&full_tx).unwrap();
+
+        // Wait for confirmation
+        rpc_client.confirm_transaction_with_spinner(&sig, &recent_block_hash, rpc_client.commitment()).unwrap();
     }
 }

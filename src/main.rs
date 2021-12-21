@@ -95,7 +95,7 @@ fn main() -> Result<(), Error> {
             println!("Partial signature: {}", sig.serialize_bs58());
         }
         Options::AggregateSignaturesAndBroadcast { signatures, amount, to, memo, recent_block_hash, net, keys } => {
-            let tx = tss::sign_and_broadcast(amount, to, memo, keys, signatures)?;
+            let tx = tss::sign_and_broadcast(amount, to, memo, recent_block_hash, keys, signatures)?;
             let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
             let sig = rpc_client.send_transaction(&tx).map_err(Error::SendTransactionFailed)?;
             rpc_client

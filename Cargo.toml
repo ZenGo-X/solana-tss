@@ -14,3 +14,8 @@ ed25519-dalek = "1"
 multi-party-eddsa = { git = "https://github.com/ZenGo-X/multi-party-eddsa.git", branch = "curv-0.9" }
 curv = {package = "curv-kzen", version = "0.9" }
 sha2 = "0.9"
+
+
+[dev-dependencies]
+solana-test-validator = "1"
+solana-streamer = "1"
