@@ -1,3 +1,6 @@
+use std::convert::TryInto;
+use std::fmt::{Display, Formatter};
+
 use curv::arithmetic::Converter;
 use curv::cryptographic_primitives::commitments::hash_commitment::HashCommitment;
 use curv::cryptographic_primitives::commitments::traits::Commitment;
@@ -6,8 +9,6 @@ use curv::BigInt;
 use multi_party_eddsa::protocols::aggsig::{self, EphemeralKey, SignFirstMsg, SignSecondMsg};
 use solana_sdk::signature::Signature;
 use spl_memo::solana_program::pubkey::Pubkey;
-use std::convert::TryInto;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub enum Error {
@@ -313,11 +314,15 @@ impl Serialize for SecretAggStepTwo {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AggMessage1, AggMessage2, PartialSignature, SecretAggStepOne, SecretAggStepTwo, Serialize};
+    use std::fmt::Debug;
+
     use multi_party_eddsa::protocols::{aggsig, ExpendedKeyPair};
     use solana_sdk::signature::Signature;
     use spl_memo::solana_program::pubkey::Pubkey;
-    use std::fmt::Debug;
+
+    use crate::serialization::{
+        AggMessage1, AggMessage2, PartialSignature, SecretAggStepOne, SecretAggStepTwo, Serialize,
+    };
 
     #[derive(PartialEq, Debug)]
     struct PanicEq<T: PartialEq + Debug>(T);

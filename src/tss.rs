@@ -1,12 +1,10 @@
-use crate::{
-    create_unsigned_transaction, AggMessage1, AggMessage2, Error, FieldError, PartialSignature, Pubkey,
-    SecretAggStepOne, SecretAggStepTwo, Serialize,
-};
 use curv::elliptic::curves::{Ed25519, Point, Scalar};
 use multi_party_eddsa::protocols::{aggsig, ExpendedKeyPair, Signature as AggSiggSignature};
-use solana_sdk::hash::Hash;
 use solana_sdk::signature::{Keypair, Signature, Signer, SignerError};
-use solana_sdk::transaction::Transaction;
+use solana_sdk::{hash::Hash, pubkey::Pubkey, transaction::Transaction};
+
+use crate::serialization::{AggMessage1, AggMessage2, PartialSignature, SecretAggStepOne, SecretAggStepTwo};
+use crate::{create_unsigned_transaction, Error};
 
 pub fn key_agg(mut keys: Vec<Pubkey>, key: Option<Pubkey>) -> Result<aggsig::KeyAgg, Error> {
     keys.sort(); // The order of the keys matter for the aggregate key
@@ -28,19 +26,13 @@ pub fn step_one(keypair: Keypair) -> (AggMessage1, SecretAggStepOne) {
 
 pub fn step_two(
     keypair: Keypair,
-    first_messages: Vec<String>,
-    secret_state: String,
-) -> Result<(AggMessage2, SecretAggStepTwo), Error> {
-    let first_messages = first_messages
-        .into_iter()
-        .map(|msg| AggMessage1::deserialize_bs58(msg).with_field("first_message"))
-        .collect::<Result<Vec<_>, _>>()?;
-    let secret_state = SecretAggStepOne::deserialize_bs58(&secret_state).with_field("secret_state")?;
-
-    Ok((
+    first_messages: Vec<AggMessage1>,
+    secret_state: SecretAggStepOne,
+) -> (AggMessage2, SecretAggStepTwo) {
+    (
         AggMessage2 { sender: keypair.pubkey(), msg: secret_state.second_msg },
         SecretAggStepTwo { ephemeral: secret_state.ephemeral, first_messages },
-    ))
+    )
 }
 
 pub fn step_three(
@@ -50,15 +42,9 @@ pub fn step_three(
     memo: Option<String>,
     recent_block_hash: Hash,
     keys: Vec<Pubkey>,
-    second_messages: Vec<String>,
-    secret_state: String,
+    second_messages: Vec<AggMessage2>,
+    secret_state: SecretAggStepTwo,
 ) -> Result<PartialSignature, Error> {
-    let second_messages = second_messages
-        .into_iter()
-        .map(|msg| AggMessage2::deserialize_bs58(&msg).with_field("second_messages"))
-        .collect::<Result<Vec<_>, _>>()?;
-    let secret_state: SecretAggStepTwo = SecretAggStepTwo::deserialize_bs58(secret_state).with_field("secret_state")?;
-
     let commitments_are_valid = secret_state.first_messages.into_iter().all(|msg1| {
         second_messages
             .iter()
@@ -96,21 +82,18 @@ pub fn sign_and_broadcast(
     to: Pubkey,
     memo: Option<String>,
     keys: Vec<Pubkey>,
-    signatures: Vec<String>,
+    signatures: Vec<PartialSignature>,
 ) -> Result<Transaction, Error> {
     let aggkey = key_agg(keys, None)?;
     let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
 
-    let partial_sigs = signatures
+    let partial_sigs: Vec<_> = signatures
         .into_iter()
-        .map(|s| PartialSignature::deserialize_bs58(s).with_field("signatures"))
-        .map(|s| {
-            s.map(|s| AggSiggSignature {
-                R: Point::from_bytes(&s.0.as_ref()[..32]).unwrap(),
-                s: Scalar::from_bytes(&s.0.as_ref()[32..]).unwrap(),
-            })
+        .map(|s| AggSiggSignature {
+            R: Point::from_bytes(&s.0.as_ref()[..32]).unwrap(),
+            s: Scalar::from_bytes(&s.0.as_ref()[32..]).unwrap(),
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect();
 
     let full_sig = aggsig::add_signature_parts(&partial_sigs);
     let mut sig_bytes = [0u8; 64];

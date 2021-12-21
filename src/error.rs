@@ -1,7 +1,9 @@
-use crate::serialization::Error as DeserializationError;
+use std::fmt::{Display, Formatter};
+
 use bs58::decode::Error as Bs58Error;
 use solana_client::client_error::ClientError;
-use std::fmt::{Display, Formatter};
+
+use crate::serialization::Error as DeserializationError;
 
 #[derive(Debug)]
 pub enum Error {

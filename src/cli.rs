@@ -5,6 +5,7 @@ use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use structopt::StructOpt;
 
 use crate::error::Error;
+use crate::serialization::{AggMessage1, AggMessage2, PartialSignature, SecretAggStepOne, SecretAggStepTwo, Serialize};
 
 // TODO: Add recent hash
 
@@ -75,11 +76,11 @@ pub enum Options {
         #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
         keypair: Keypair,
         /// A list of all the first messages received in step 1
-        #[structopt(required = true, min_values = 1, long = "first-messages")]
-        first_messages: Vec<String>,
+        #[structopt(required = true, min_values = 1, long = "first-messages", parse(try_from_str = Serialize::deserialize_bs58))]
+        first_messages: Vec<AggMessage1>,
         /// The secret state received in step 1.
-        #[structopt(long = "secret-state")]
-        secret_state: String,
+        #[structopt(long = "secret-state", parse(try_from_str = Serialize::deserialize_bs58))]
+        secret_state: SecretAggStepOne,
     },
     /// Step 3 of aggregate signing, you should pass in the secret data from step 2.
     /// It's important that all parties pass in exactly the same transaction details (amount,to,net,memo,recent_block_hash)
@@ -103,16 +104,16 @@ pub enum Options {
         #[structopt(long, required = true, min_values = 2)]
         keys: Vec<Pubkey>,
         /// A list of all the first messages received in step 2
-        #[structopt(long, required = true, min_values = 1, empty_values = false)]
-        second_messages: Vec<String>,
+        #[structopt(long, required = true, min_values = 1, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
+        second_messages: Vec<AggMessage2>,
         /// The secret state received in step 2.
-        #[structopt(long, empty_values = false)]
-        secret_state: String,
+        #[structopt(long, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
+        secret_state: SecretAggStepTwo,
     },
     AggregateSignaturesAndBroadcast {
         // A list of all partial signatures produced in step three.
-        #[structopt(long, required = true, min_values = 2, empty_values = false)]
-        signatures: Vec<String>,
+        #[structopt(long, required = true, min_values = 2, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
+        signatures: Vec<PartialSignature>,
         /// The amount of SOL you want to send.
         #[structopt(long)]
         amount: f64,

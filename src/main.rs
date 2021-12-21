@@ -10,9 +10,7 @@ use structopt::StructOpt;
 
 use crate::cli::Options;
 use crate::error::Error;
-use crate::serialization::{
-    AggMessage1, AggMessage2, FieldError, PartialSignature, SecretAggStepOne, SecretAggStepTwo, Serialize,
-};
+use crate::serialization::Serialize;
 
 mod cli;
 mod error;
@@ -55,7 +53,7 @@ fn main() -> Result<(), Error> {
                 .confirm_transaction_with_spinner(&sig, &recent_hash, rpc_client.commitment())
                 .map_err(Error::ConfirmingTransactionFailed)?;
         }
-        Options::RecentBlockHash {net} => {
+        Options::RecentBlockHash { net } => {
             let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
             let recent_hash = rpc_client.get_latest_blockhash().map_err(Error::RecentHashFailed)?;
             println!("recent block hash: {}", recent_hash);
@@ -75,7 +73,7 @@ fn main() -> Result<(), Error> {
             );
         }
         Options::AggSendStepTwo { keypair, first_messages, secret_state } => {
-            let (second_msg, secret_state) = tss::step_two(keypair, first_messages, secret_state)?;
+            let (second_msg, secret_state) = tss::step_two(keypair, first_messages, secret_state);
             println!("Message 2: {} (send to all other parties)", second_msg.serialize_bs58());
             println!(
                 "Secret state: {} (keep this a secret, and pass it back to `agg-send-step-three`:)",
