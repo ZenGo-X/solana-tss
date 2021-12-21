@@ -68,7 +68,7 @@ fn main() -> Result<(), Error> {
 
             println!("Message 1: {} (send to all other parties)", first_msg.serialize_bs58());
             println!(
-                "Secret state: keep this a secret, and pass it back to `agg-send-step-two`: {}",
+                "Secret state: {} (keep this a secret, and pass it back to `agg-send-step-two`)",
                 secret.serialize_bs58()
             );
         }

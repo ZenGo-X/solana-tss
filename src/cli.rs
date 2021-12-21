@@ -13,8 +13,10 @@ use crate::serialization::{AggMessage1, AggMessage2, PartialSignature, SecretAgg
 #[structopt(name = "solana-tss", about = "A PoC for managing a Solana TSS wallet.")]
 pub enum Options {
     /// Generate a pair of keys.
+    #[structopt(display_order=1)]
     Generate,
     /// Check the balance of an address.
+    #[structopt(display_order=2)]
     Balance {
         /// The address to check the balance of
         address: Pubkey,
@@ -23,6 +25,7 @@ pub enum Options {
         net: Network,
     },
     /// Request an airdrop from a faucet.
+    #[structopt(display_order=3)]
     Airdrop {
         /// Address of the recipient
         #[structopt(long)]
@@ -35,6 +38,7 @@ pub enum Options {
         net: Network,
     },
     /// Send a transaction using a single private key.
+    #[structopt(display_order=4)]
     SendSingle {
         /// A Base58 secret key
         #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
@@ -53,24 +57,28 @@ pub enum Options {
         memo: Option<String>,
     },
     /// Print the hash of a recent block, can be used to pass to the `agg-send` steps
+    #[structopt(display_order=8)]
     RecentBlockHash {
         /// Choose the desired network: Mainnet/Testnet/Devnet
         #[structopt(default_value = "testnet", long)]
         net: Network,
     },
     /// Aggregate a list of addresses into a single address that they can all sign on together
+    #[structopt(display_order=5)]
     AggregateKeys {
         /// List of addresses
-        #[structopt(min_values = 2)]
+        #[structopt(min_values = 2, required = true)]
         keys: Vec<Pubkey>,
     },
     /// Start aggregate signing
+    #[structopt(display_order=6)]
     AggSendStepOne {
         /// A Base58 secret key of the party signing
         #[structopt(parse(try_from_str = parse_keypair_bs58))]
         keypair: Keypair,
     },
     /// Step 2 of aggregate signing, you should pass in the secret data from step 1.
+    #[structopt(display_order=7)]
     AggSendStepTwo {
         /// A Base58 secret key of the party signing
         #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
@@ -84,6 +92,7 @@ pub enum Options {
     },
     /// Step 3 of aggregate signing, you should pass in the secret data from step 2.
     /// It's important that all parties pass in exactly the same transaction details (amount,to,net,memo,recent_block_hash)
+    #[structopt(display_order=9)]
     AggSendStepThree {
         /// A Base58 secret key of the party signing
         #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
@@ -110,6 +119,8 @@ pub enum Options {
         #[structopt(long, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
         secret_state: SecretAggStepTwo,
     },
+    /// Aggregate all the partial signatures together into a full signature, and send the transaction to Solana
+    #[structopt(display_order=10)]
     AggregateSignaturesAndBroadcast {
         // A list of all partial signatures produced in step three.
         #[structopt(long, required = true, min_values = 2, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
