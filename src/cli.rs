@@ -17,7 +17,7 @@ pub enum Options {
     Balance {
         /// The address to check the balance of
         address: Pubkey,
-        /// Choose the desired netwrok: Mainnet/Testnet/Devnet
+        /// Choose the desired network: Mainnet/Testnet/Devnet
         #[structopt(default_value = "testnet", long)]
         net: Network,
     },
@@ -29,7 +29,7 @@ pub enum Options {
         /// The amount of SOL you want to send.
         #[structopt(long)]
         amount: f64,
-        /// Choose the desired netwrok: Mainnet/Testnet/Devnet
+        /// Choose the desired network: Mainnet/Testnet/Devnet
         #[structopt(default_value = "testnet", long)]
         net: Network,
     },
@@ -44,12 +44,18 @@ pub enum Options {
         /// Address of the recipient
         #[structopt(long)]
         to: Pubkey,
-        /// Choose the desired netwrok: Mainnet/Testnet/Devnet
+        /// Choose the desired network: Mainnet/Testnet/Devnet
         #[structopt(default_value = "testnet", long)]
         net: Network,
         /// Add a memo to the transaction
         #[structopt(long)]
         memo: Option<String>,
+    },
+    /// Print the hash of a recent block, can be used to pass to the `agg-send` steps
+    RecentBlockHash {
+        /// Choose the desired network: Mainnet/Testnet/Devnet
+        #[structopt(default_value = "testnet", long)]
+        net: Network,
     },
     /// Aggregate a list of addresses into a single address that they can all sign on together
     AggregateKeys {
@@ -120,7 +126,7 @@ pub enum Options {
         #[structopt(long)]
         recent_block_hash: Hash,
         /// List of addresses that are part of this
-        /// Choose the desired netwrok: Mainnet/Testnet/Devnet
+        /// Choose the desired network: Mainnet/Testnet/Devnet
         #[structopt(default_value = "testnet", long)]
         net: Network,
         /// List of addresses

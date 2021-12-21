@@ -55,6 +55,11 @@ fn main() -> Result<(), Error> {
                 .confirm_transaction_with_spinner(&sig, &recent_hash, rpc_client.commitment())
                 .map_err(Error::ConfirmingTransactionFailed)?;
         }
+        Options::RecentBlockHash {net} => {
+            let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
+            let recent_hash = rpc_client.get_latest_blockhash().map_err(Error::RecentHashFailed)?;
+            println!("recent block hash: {}", recent_hash);
+        }
         Options::AggregateKeys { keys } => {
             let aggkey = tss::key_agg(keys, None)?;
             let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
