@@ -6,6 +6,8 @@ use structopt::StructOpt;
 
 use crate::error::Error;
 
+// TODO: Add recent hash
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "solana-tss", about = "A PoC for managing a Solana TSS wallet.")]
 pub enum Options {
@@ -14,7 +16,6 @@ pub enum Options {
     /// Check the balance of an address.
     Balance {
         /// The address to check the balance of
-        #[structopt(long)]
         address: Pubkey,
         /// Choose the desired netwrok: Mainnet/Testnet/Devnet
         #[structopt(default_value = "testnet", long)]
@@ -93,10 +94,10 @@ pub enum Options {
         #[structopt(long)]
         recent_block_hash: Hash,
         /// List of addresses that are part of this
-        #[structopt(long, min_values = 2)]
+        #[structopt(long, required = true, min_values = 2)]
         keys: Vec<Pubkey>,
         /// A list of all the first messages received in step 2
-        #[structopt(long, min_values = 1, empty_values = false)]
+        #[structopt(long, required = true, min_values = 1, empty_values = false)]
         second_messages: Vec<String>,
         /// The secret state received in step 2.
         #[structopt(long, empty_values = false)]
@@ -104,7 +105,7 @@ pub enum Options {
     },
     AggregateSignaturesAndBroadcast {
         // A list of all partial signatures produced in step three.
-        #[structopt(long, min_values = 2, empty_values = false)]
+        #[structopt(long, required = true, min_values = 2, empty_values = false)]
         signatures: Vec<String>,
         /// The amount of SOL you want to send.
         #[structopt(long)]
@@ -123,7 +124,7 @@ pub enum Options {
         #[structopt(default_value = "testnet", long)]
         net: Network,
         /// List of addresses
-        #[structopt(long, min_values = 2)]
+        #[structopt(long, required = true, min_values = 2)]
         keys: Vec<Pubkey>,
     },
 }

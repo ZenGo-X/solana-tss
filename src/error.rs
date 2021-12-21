@@ -16,6 +16,7 @@ pub enum Error {
     DeserializationFailed { error: DeserializationError, field_name: &'static str },
     MismatchMessages,
     InvalidSignature,
+    KeyPairIsNotInKeys,
 }
 
 impl Display for Error {
@@ -34,6 +35,7 @@ impl Display for Error {
             }
             Self::MismatchMessages => write!(f, "There is a mismatch between first_messages and second_messages"),
             Self::InvalidSignature => write!(f, "The resulting signature doesn't match the transaction"),
+            Self::KeyPairIsNotInKeys => write!(f, "The provided keypair is not in the list of pubkeys"),
         }
     }
 }
