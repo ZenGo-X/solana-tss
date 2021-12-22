@@ -98,6 +98,7 @@ fn main() -> Result<(), Error> {
             let tx = tss::sign_and_broadcast(amount, to, memo, recent_block_hash, keys, signatures)?;
             let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
             let sig = rpc_client.send_transaction(&tx).map_err(Error::SendTransactionFailed)?;
+            println!("Transaction ID: {}", sig);
             rpc_client
                 .confirm_transaction_with_spinner(&sig, &recent_block_hash, rpc_client.commitment())
                 .map_err(Error::ConfirmingTransactionFailed)?;
