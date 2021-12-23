@@ -8,7 +8,8 @@ use crate::{create_unsigned_transaction, Error};
 
 /// Create the aggregate public key, pass key=None if you don't care about the coefficient
 pub fn key_agg(mut keys: Vec<Pubkey>, key: Option<Pubkey>) -> Result<aggsig::KeyAgg, Error> {
-    keys.sort(); // The order of the keys matter for the aggregate key
+    // The order of the keys matter for the aggregate key
+    keys.sort();
     // Get the index of the specific key in the key list, so KeyAgg::hash will contain its coefficient
     let index = key.map(|k| keys.binary_search(&k)).unwrap_or(Ok(0)).map_err(|_| Error::KeyPairIsNotInKeys)?;
     let keys: Vec<_> = keys
@@ -39,6 +40,7 @@ pub fn step_two(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn step_three(
     keypair: Keypair,
     amount: f64,
