@@ -12,6 +12,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
+      - name: Install libudev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -32,6 +37,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
+      - name: Install libudev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -51,6 +61,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
+      - name: Install libudev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+
+
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -69,6 +85,11 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
+
+      - name: Install libudev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
