@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 
 party_1() {
   printf "\e[1;4;31mParty 1: %s\e[0m\n" "$1"
@@ -84,25 +85,6 @@ party2state=$(echo "$party2_raw" | tail -1 | cut -d " " -f3)
 printf "Message 1: %s (send to all other parties)\nSecret state: %s (keep this a secret, and pass it back to \`agg-send-step-two\`)\n\n" "$(short_print "$party2msg1")" "$(short_print "$party2state")"
 sleep 0.3s
 
-party_1 "Process message 1 and generate message 2"
-printf "$ solana-tss agg-send-step-two --first-messages %s --keypair %s --secret-state %s \n" "$(short_print "$party2msg1")" "$(short_print "$secretkey1")" "$(short_print "$party1state")"
-sleep 0.6s
-party1_raw=$( solana-tss agg-send-step-two --first-messages "$party2msg1" --keypair "$secretkey1" --secret-state "$party1state" )
-party1msg2=$(echo "$party1_raw" | head -1 | cut -d " " -f3)
-party1state=$(echo "$party1_raw" | tail -1 | cut -d " " -f3)
-printf "Message 2: %s (send to all other parties)\nSecret state: %s (keep this a secret, and pass it back to \`agg-send-step-three\`)\n" "$(short_print "$party1msg2")" "$(short_print "$party1state")"
-sleep 0.3s
-
-
-party_2 "Process message 1 and generate message 2"
-printf "$ solana-tss agg-send-step-two --first-messages %s --keypair %s --secret-state %s \n\n" "$(short_print "$party1msg1")" "$(short_print "$secretkey2")" "$(short_print "$party2state")"
-sleep 0.6s
-party2_raw=$( solana-tss agg-send-step-two --first-messages "$party1msg1" --keypair "$secretkey2" --secret-state "$party2state" )
-party2msg2=$(echo "$party2_raw" | head -1 | cut -d " " -f3)
-party2state=$(echo "$party2_raw" | tail -1 | cut -d " " -f3)
-printf "Message 2: %s (send to all other parties)\nSecret state: %s (keep this a secret, and pass it back to \`agg-send-step-three\`)\n\n" "$(short_print "$party2msg2")" "$(short_print "$party2state")"
-sleep 0.3s
-
 all_parties "Check recent block hash"
 echo "$ solana-tss recent-block-hash --net devnet"
 sleep 0.6s
@@ -111,20 +93,21 @@ recent_block_hash=$(echo "$recent_block_hash" | cut -d " " -f4)
 printf "Recent block hash: %s\n\n" "$(short_print "$recent_block_hash")"
 sleep 0.3s
 
-party_1 "Process message 2 and generate message 3"
-printf "$ solana-tss agg-send-step-three --keypair %s --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --second-messages %s --secret-state %s\n" \
-  "$(short_print "$secretkey1")" "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$party2msg2")" "$(short_print "$party1state")"
+party_1 "Process message 1 and generate message 2"
+printf "$ solana-tss agg-send-step-two --keypair %s --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --first-messages %s --secret-state %s\n" \
+  "$(short_print "$secretkey1")" "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$party2msg1")" "$(short_print "$party1state")"
 sleep 0.6s
-party1_raw=$( solana-tss agg-send-step-three --keypair "$secretkey1" --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --second-messages "$party2msg2" --secret-state "$party1state" )
+party1_raw=$( solana-tss agg-send-step-two --keypair "$secretkey1" --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --first-messages "$party2msg1" --secret-state "$party1state" )
 partialsig1=$(echo "$party1_raw" | cut -d " " -f3)
 printf "Partial signature: %s\n" "$(short_print "$partialsig1")"
 sleep 0.3s
 
-party_2 "Process message 2 and generate message 3"
-printf "$ solana-tss agg-send-step-three --keypair %s --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --second-messages %s --secret-state %s\n" \
-  "$(short_print "$secretkey2")" "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$party1msg2")" "$(short_print "$party2state")"
+
+party_2 "Process message 1 and generate message 2"
+printf "$ solana-tss agg-send-step-two --keypair %s --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --first-messages %s --secret-state %s\n" \
+  "$(short_print "$secretkey2")" "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$party1msg1")" "$(short_print "$party2state")"
 sleep 0.6s
-party2_raw=$( solana-tss agg-send-step-three --keypair "$secretkey2" --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --second-messages "$party1msg2" --secret-state "$party2state" )
+party2_raw=$( solana-tss agg-send-step-two --keypair "$secretkey2" --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --first-messages "$party1msg1" --secret-state "$party2state" )
 partialsig2=$(echo "$party2_raw" | cut -d " " -f3)
 printf "Partial signature: %s\n\n" "$(short_print "$partialsig2")"
 sleep 0.3s
