@@ -1,4 +1,3 @@
-use rand::thread_rng;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
@@ -19,10 +18,9 @@ mod tss;
 
 fn main() -> Result<(), Error> {
     let opts = Options::from_args();
-    let mut rng = thread_rng();
     match opts {
         Options::Generate => {
-            let keypair = Keypair::generate(&mut rng);
+            let keypair = Keypair::generate(&mut rand07::thread_rng());
             println!("secret key: {}", keypair.to_base58_string());
             println!("public key: {}", keypair.pubkey());
         }
@@ -60,7 +58,7 @@ fn main() -> Result<(), Error> {
         }
         Options::AggregateKeys { keys } => {
             let aggkey = tss::key_agg(keys, None)?;
-            let aggpubkey = Pubkey::new(&*aggkey.apk.to_bytes(true));
+            let aggpubkey = Pubkey::new(&*aggkey.agg_public_key.to_bytes(true));
             println!("The Aggregated Public Key: {}", aggpubkey);
         }
         Options::AggSendStepOne { keypair } => {
@@ -72,26 +70,17 @@ fn main() -> Result<(), Error> {
                 secret.serialize_bs58()
             );
         }
-        Options::AggSendStepTwo { keypair, first_messages, secret_state } => {
-            let (second_msg, secret_state) = tss::step_two(keypair, first_messages, secret_state);
-            println!("Message 2: {} (send to all other parties)", second_msg.serialize_bs58());
-            println!(
-                "Secret state: {} (keep this a secret, and pass it back to `agg-send-step-three`:)",
-                secret_state.serialize_bs58()
-            );
-        }
-        Options::AggSendStepThree {
+        Options::AggSendStepTwo {
             keypair,
             amount,
             to,
             memo,
             recent_block_hash,
             keys,
-            second_messages,
+            first_messages,
             secret_state,
         } => {
-            let sig =
-                tss::step_three(keypair, amount, to, memo, recent_block_hash, keys, second_messages, secret_state)?;
+            let sig = tss::step_two(keypair, amount, to, memo, recent_block_hash, keys, first_messages, secret_state)?;
             println!("Partial signature: {}", sig.serialize_bs58());
         }
         Options::AggregateSignaturesAndBroadcast { signatures, amount, to, memo, recent_block_hash, net, keys } => {

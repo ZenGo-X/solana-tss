@@ -5,9 +5,7 @@ use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use structopt::StructOpt;
 
 use crate::error::Error;
-use crate::serialization::{AggMessage1, AggMessage2, PartialSignature, SecretAggStepOne, SecretAggStepTwo, Serialize};
-
-// TODO: Add recent hash
+use crate::serialization::{AggMessage1, PartialSignature, SecretAggStepOne, Serialize};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "solana-tss", about = "A PoC for managing a Solana TSS wallet.")]
@@ -78,22 +76,9 @@ pub enum Options {
         keypair: Keypair,
     },
     /// Step 2 of aggregate signing, you should pass in the secret data from step 1.
-    #[structopt(display_order = 7)]
-    AggSendStepTwo {
-        /// A Base58 secret key of the party signing
-        #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
-        keypair: Keypair,
-        /// A list of all the first messages received in step 1
-        #[structopt(required = true, min_values = 1, long = "first-messages", parse(try_from_str = Serialize::deserialize_bs58))]
-        first_messages: Vec<AggMessage1>,
-        /// The secret state received in step 1.
-        #[structopt(long = "secret-state", parse(try_from_str = Serialize::deserialize_bs58))]
-        secret_state: SecretAggStepOne,
-    },
-    /// Step 3 of aggregate signing, you should pass in the secret data from step 2.
     /// It's important that all parties pass in exactly the same transaction details (amount,to,net,memo,recent_block_hash)
     #[structopt(display_order = 9)]
-    AggSendStepThree {
+    AggSendStepTwo {
         /// A Base58 secret key of the party signing
         #[structopt(parse(try_from_str = parse_keypair_bs58), long)]
         keypair: Keypair,
@@ -112,12 +97,12 @@ pub enum Options {
         /// List of addresses that are part of this
         #[structopt(long, required = true, min_values = 2)]
         keys: Vec<Pubkey>,
-        /// A list of all the first messages received in step 2
+        /// A list of all the first messages received in step 1
         #[structopt(long, required = true, min_values = 1, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
-        second_messages: Vec<AggMessage2>,
+        first_messages: Vec<AggMessage1>,
         /// The secret state received in step 2.
         #[structopt(long, empty_values = false, parse(try_from_str = Serialize::deserialize_bs58))]
-        secret_state: SecretAggStepTwo,
+        secret_state: SecretAggStepOne,
     },
     /// Aggregate all the partial signatures together into a full signature, and send the transaction to Solana
     #[structopt(display_order = 10)]
