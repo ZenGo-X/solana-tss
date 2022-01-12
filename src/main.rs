@@ -5,7 +5,7 @@ use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{native_token, signature::Signer, system_instruction};
 use spl_memo::solana_program::pubkey::Pubkey;
-use structopt::StructOpt;
+use clap::Parser;
 
 use crate::cli::Options;
 use crate::error::Error;
@@ -17,7 +17,7 @@ mod serialization;
 mod tss;
 
 fn main() -> Result<(), Error> {
-    let opts = Options::from_args();
+    let opts = Options::parse();
     match opts {
         Options::Generate => {
             let keypair = Keypair::generate(&mut rand07::thread_rng());

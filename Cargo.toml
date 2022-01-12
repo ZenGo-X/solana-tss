@@ -2,19 +2,18 @@
 name = "solana-tss"
 version = "0.1.0"
 edition = "2018"
+description = "A PoC for managing a Solana TSS wallet"
 
 [dependencies]
 solana-client = "1"
 solana-sdk = "1"
 spl-memo = "3"
-structopt = "0.3"
+clap = { version = "3", features = ["derive", "color"] }
 bs58 = "0.4"
 rand07 = { package = "rand", version =  "0.7" }
 ed25519-dalek = "1"
 multi-party-eddsa = { git = "https://github.com/ZenGo-X/multi-party-eddsa.git", rev = "4b5e5c8d8e92f94eed38b037e0d83ad0d2a144ea" }
 curv = {package = "curv-kzen", version = "0.9" }
-sha2 = "0.9"
-
 
 [dev-dependencies]
 solana-test-validator = "1"
