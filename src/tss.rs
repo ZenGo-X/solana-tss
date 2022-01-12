@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use curv::elliptic::curves::{Ed25519, Point, Scalar};
-use multi_party_eddsa::protocols::musig2::PartialNonces;
-use multi_party_eddsa::protocols::{musig2, ExpandedKeyPair};
+use multi_party_eddsa::protocols::musig2::{self, PrivatePartialNonces, PublicPartialNonces};
+use multi_party_eddsa::protocols::ExpandedKeyPair;
 use solana_sdk::signature::{Keypair, Signature, Signer, SignerError};
 use solana_sdk::{hash::Hash, pubkey::Pubkey, transaction::Transaction};
 
@@ -19,21 +19,18 @@ pub fn key_agg(keys: Vec<Pubkey>, key: Option<Pubkey>) -> Result<musig2::PublicK
     };
     let keys: Vec<_> = keys.into_iter().map(convert_keys).collect::<Result<_, _>>()?;
     let key = key.map(convert_keys).unwrap_or_else(|| Ok(keys[0].clone()))?;
-    if !keys.contains(&key) {
-        return Err(Error::KeyPairIsNotInKeys);
-    }
-    Ok(musig2::PublicKeyAgg::key_aggregation_n(keys, &key))
+    musig2::PublicKeyAgg::key_aggregation_n(keys, &key).ok_or(Error::KeyPairIsNotInKeys)
 }
 
 /// Generate Message1 which contains nonce, public nonce, and commitment to nonces
 pub fn step_one(keypair: Keypair) -> (AggMessage1, SecretAggStepOne) {
     let extended_kepair = ExpandedKeyPair::create_from_private_key(keypair.secret().to_bytes());
     // we don't really need to pass a message here.
-    let partial_nonces = musig2::generate_partial_nonces(&extended_kepair, None, &mut rand08::thread_rng());
+    let (private_nonces, public_nonces) = musig2::generate_partial_nonces(&extended_kepair, None);
 
     (
-        AggMessage1 { sender: keypair.pubkey(), public_nonces: partial_nonces.R.clone() },
-        SecretAggStepOne { ephemeral: partial_nonces },
+        AggMessage1 { sender: keypair.pubkey(), public_nonces: public_nonces.clone() },
+        SecretAggStepOne { private_nonces, public_nonces },
     )
 }
 
@@ -48,7 +45,7 @@ pub fn step_two(
     first_messages: Vec<AggMessage1>,
     secret_state: SecretAggStepOne,
 ) -> Result<PartialSignature, Error> {
-    let other_nonces: Vec<_> = first_messages.into_iter().map(|msg1| msg1.public_nonces).collect();
+    let other_nonces: Vec<_> = first_messages.into_iter().map(|msg1| msg1.public_nonces.R).collect();
 
     // Generate the aggregate key together with the coefficient of the current keypair
     let aggkey = key_agg(keys, Some(keypair.pubkey()))?;
@@ -59,7 +56,8 @@ pub fn step_two(
     let mut tx = create_unsigned_transaction(amount, &to, memo, &aggpubkey);
 
     let signer = PartialSigner {
-        signer_partial_nonce: secret_state.ephemeral,
+        signer_private_nonce: secret_state.private_nonces,
+        signer_public_nonce: secret_state.public_nonces,
         other_nonces,
         extended_kepair,
         aggregated_pubkey: aggkey,
@@ -129,7 +127,8 @@ pub fn sign_and_broadcast(
 }
 
 struct PartialSigner {
-    signer_partial_nonce: PartialNonces,
+    signer_private_nonce: PrivatePartialNonces,
+    signer_public_nonce: PublicPartialNonces,
     other_nonces: Vec<[Point<Ed25519>; 2]>,
     extended_kepair: ExpandedKeyPair,
     aggregated_pubkey: musig2::PublicKeyAgg,
@@ -143,7 +142,8 @@ impl Signer for PartialSigner {
     fn try_sign_message(&self, message: &[u8]) -> Result<Signature, SignerError> {
         let sig = musig2::partial_sign(
             &self.other_nonces,
-            self.signer_partial_nonce.clone(),
+            self.signer_private_nonce.clone(),
+            self.signer_public_nonce.clone(),
             &self.aggregated_pubkey,
             &self.extended_kepair,
             message,

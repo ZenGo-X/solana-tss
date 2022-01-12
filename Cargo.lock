@@ -2334,7 +2334,7 @@ dependencies = [
 [[package]]
 name = "multi-party-eddsa"
 version = "0.3.0"
-source = "git+https://github.com/ZenGo-X/multi-party-eddsa.git?rev=657eb20356b82ffa50c98a21f28b79b06432c2d9#657eb20356b82ffa50c98a21f28b79b06432c2d9"
+source = "git+https://github.com/ZenGo-X/multi-party-eddsa.git?rev=4b5e5c8d8e92f94eed38b037e0d83ad0d2a144ea#4b5e5c8d8e92f94eed38b037e0d83ad0d2a144ea"
 dependencies = [
  "curv-kzen",
  "hex 0.3.2",
@@ -4926,7 +4926,6 @@ dependencies = [
  "ed25519-dalek",
  "multi-party-eddsa",
  "rand 0.7.3",
- "rand 0.8.4",
  "sha2 0.9.8",
  "solana-client",
  "solana-sdk",

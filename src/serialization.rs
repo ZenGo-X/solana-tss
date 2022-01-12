@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
-use curv::elliptic::curves::{DeserializationError, Ed25519, Point, PointFromBytesError, Scalar};
-use multi_party_eddsa::protocols::musig2::PartialNonces;
+use curv::elliptic::curves::{DeserializationError, Point, PointFromBytesError, Scalar};
+use multi_party_eddsa::protocols::musig2::{PrivatePartialNonces, PublicPartialNonces};
 use solana_sdk::signature::Signature;
 use spl_memo::solana_program::pubkey::Pubkey;
 
@@ -105,7 +105,7 @@ pub trait Serialize: Sized {
 
 #[derive(Debug, PartialEq)]
 pub struct AggMessage1 {
-    pub public_nonces: [Point<Ed25519>; 2],
+    pub public_nonces: PublicPartialNonces,
     pub sender: Pubkey,
 }
 
@@ -113,8 +113,8 @@ impl Serialize for AggMessage1 {
     fn serialize(&self, append_to: &mut Vec<u8>) {
         append_to.reserve(self.size_hint());
         append_to.push(Tag::AggMessage1 as u8);
-        append_to.extend(&*self.public_nonces[0].to_bytes(true));
-        append_to.extend(&*self.public_nonces[1].to_bytes(true));
+        append_to.extend(&*self.public_nonces.R[0].to_bytes(true));
+        append_to.extend(&*self.public_nonces.R[1].to_bytes(true));
         append_to.extend(self.sender.to_bytes());
     }
     fn deserialize(b: &[u8]) -> Result<Self, Error> {
@@ -125,7 +125,8 @@ impl Serialize for AggMessage1 {
         if tag != Tag::AggMessage1 {
             return Err(Error::WrongTag { expected: Tag::AggMessage1, found: tag });
         }
-        let public_nonces = [Point::from_bytes(&b[1..32 + 1])?, Point::from_bytes(&b[1 + 32..64 + 1])?];
+        let public_nonces =
+            PublicPartialNonces { R: [Point::from_bytes(&b[1..32 + 1])?, Point::from_bytes(&b[1 + 32..64 + 1])?] };
         let sender = Pubkey::new(&b[64 + 1..64 + 32 + 1]);
         Ok(Self { public_nonces, sender })
     }
@@ -159,15 +160,10 @@ impl Serialize for PartialSignature {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct SecretAggStepOne {
-    pub ephemeral: PartialNonces,
-}
-
-impl PartialEq for SecretAggStepOne {
-    fn eq(&self, other: &Self) -> bool {
-        self.ephemeral.r.eq(&other.ephemeral.r) && self.ephemeral.R.eq(&self.ephemeral.R)
-    }
+    pub private_nonces: PrivatePartialNonces,
+    pub public_nonces: PublicPartialNonces,
 }
 
 impl Serialize for SecretAggStepOne {
@@ -175,10 +171,10 @@ impl Serialize for SecretAggStepOne {
         append_to.reserve(self.size_hint());
         append_to.push(Tag::SecretAggStepOne as u8);
 
-        append_to.extend(&*self.ephemeral.r[0].to_bytes());
-        append_to.extend(&*self.ephemeral.r[1].to_bytes());
-        append_to.extend(&*self.ephemeral.R[0].to_bytes(true));
-        append_to.extend(&*self.ephemeral.R[1].to_bytes(true));
+        append_to.extend(&*self.private_nonces.r[0].to_bytes());
+        append_to.extend(&*self.private_nonces.r[1].to_bytes());
+        append_to.extend(&*self.public_nonces.R[0].to_bytes(true));
+        append_to.extend(&*self.public_nonces.R[1].to_bytes(true));
     }
     fn deserialize(b: &[u8]) -> Result<Self, Error> {
         if b.len() < 1 + 64 + 64 {
@@ -189,10 +185,13 @@ impl Serialize for SecretAggStepOne {
         if tag != Tag::SecretAggStepOne {
             return Err(Error::WrongTag { expected: Tag::SecretAggStepOne, found: tag });
         }
-        let r = [Scalar::from_bytes(&b[1..1 + 32])?, Scalar::from_bytes(&b[1 + 32..1 + 64])?];
+        let private_nonces =
+            PrivatePartialNonces { r: [Scalar::from_bytes(&b[1..1 + 32])?, Scalar::from_bytes(&b[1 + 32..1 + 64])?] };
         #[allow(non_snake_case)]
-        let R = [Point::from_bytes(&b[1 + 64..1 + 64 + 32])?, Point::from_bytes(&b[1 + 96..1 + 96 + 32])?];
-        Ok(Self { ephemeral: PartialNonces { R, r } })
+        let public_nonces = PublicPartialNonces {
+            R: [Point::from_bytes(&b[1 + 64..1 + 64 + 32])?, Point::from_bytes(&b[1 + 96..1 + 96 + 32])?],
+        };
+        Ok(Self { private_nonces, public_nonces })
     }
     fn size_hint(&self) -> usize {
         1 + 64 + 64
@@ -220,12 +219,11 @@ mod tests {
     fn test_agg_msg1() {
         let mut msg = [0u8; 32];
         let mut sender = [0u8; 32];
-        let mut rng = rand08::thread_rng();
         for i in 0..u8::MAX {
             sender.fill(i);
             msg.fill(i);
-            let partial_nonces = musig2::generate_partial_nonces(&ExpandedKeyPair::create(), Some(&msg), &mut rng);
-            let aggmsg1 = AggMessage1 { public_nonces: partial_nonces.R, sender: Pubkey::new(&sender) };
+            let (_, public_nonces) = musig2::generate_partial_nonces(&ExpandedKeyPair::create(), Some(&msg));
+            let aggmsg1 = AggMessage1 { public_nonces, sender: Pubkey::new(&sender) };
             let serialized = aggmsg1.serialize_bs58();
             let deserialized = AggMessage1::deserialize_bs58(serialized).unwrap();
             assert_eq!(PanicEq(aggmsg1), PanicEq(deserialized));
@@ -246,12 +244,12 @@ mod tests {
 
     #[test]
     fn test_serialize_secret_agg1() {
-        let mut rng = rand08::thread_rng();
         let mut data = [0u8; 32];
         for i in 0..u8::MAX {
             data.fill(i);
-            let partial_nonces = musig2::generate_partial_nonces(&ExpandedKeyPair::create(), Some(&data), &mut rng);
-            let secret_agg1 = SecretAggStepOne { ephemeral: partial_nonces };
+            let (private_nonces, public_nonces) =
+                musig2::generate_partial_nonces(&ExpandedKeyPair::create(), Some(&data));
+            let secret_agg1 = SecretAggStepOne { private_nonces, public_nonces };
             let serialized = secret_agg1.serialize_bs58();
             let deserialized = SecretAggStepOne::deserialize_bs58(serialized).unwrap();
             assert_eq!(PanicEq(secret_agg1), PanicEq(deserialized));
