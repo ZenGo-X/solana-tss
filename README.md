@@ -3,7 +3,7 @@ A Proof-Of-Concept showing n-of-n offchain multisignatures on Solana
 
 
 ## Demo
-![Alt asciicast](./demo.svg)
+![gif](./demo.gif)
 
 ## Building
 ### From Sources
