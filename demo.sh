@@ -21,25 +21,25 @@ cargo build
 cd ./target/debug/ || exit
 PATH="$PATH:."
 
-party_1 "Generate Keys"
+party_1 "Generate Shares"
 echo "$ solana-tss generate"
 sleep 0.6s
 keypair1=$(solana-tss generate)
 pubkey1=$(echo "$keypair1" | tac -s " " | head -1)
 secretkey1=$(echo "$keypair1" | head -1 | cut -d " " -f3)
-printf "secret key: %s\npublic key: %s \n" "$(short_print "$secretkey1")" "$(short_print "$pubkey1")"
+printf "secret share: %s\npublic share: %s \n" "$(short_print "$secretkey1")" "$(short_print "$pubkey1")"
 sleep 0.3s
 
-party_2 "Generate Keys"
+party_2 "Generate Shares"
 echo "$ solana-tss generate"
 sleep 0.6s
 keypair2=$(solana-tss generate)
 pubkey2=$(echo "$keypair2" | tac -s " " | head -1)
 secretkey2=$(echo "$keypair2" | head -1 | cut -d " " -f3)
-printf "secret key: %s\npublic key: %s \n\n" "$(short_print "$secretkey2")" "$(short_print "$pubkey2")"
+printf "secret share: %s\npublic share: %s \n\n" "$(short_print "$secretkey2")" "$(short_print "$pubkey2")"
 sleep 0.3s
 
-all_parties "Aggregate the keys(either party can execute)"
+all_parties "Aggregate the Shares(either party can execute)"
 printf "$ solana-tss aggregate-keys %s %s\n" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")"
 sleep 0.6s
 aggkey_text=$( solana-tss aggregate-keys "$pubkey1" "$pubkey2" )
@@ -94,29 +94,29 @@ printf "Recent block hash: %s\n\n" "$(short_print "$recent_block_hash")"
 sleep 0.3s
 
 party_1 "Process message 1 and generate message 2"
-printf "$ solana-tss agg-send-step-two --keypair %s --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --first-messages %s --secret-state %s\n" \
+printf "$ solana-tss agg-send-step-two --keypair %s --to %s --amount 0.1 --memo \"ZenGo: 2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --first-messages %s --secret-state %s\n" \
   "$(short_print "$secretkey1")" "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$party2msg1")" "$(short_print "$party1state")"
 sleep 0.6s
-party1_raw=$( solana-tss agg-send-step-two --keypair "$secretkey1" --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --first-messages "$party2msg1" --secret-state "$party1state" )
+party1_raw=$( solana-tss agg-send-step-two --keypair "$secretkey1" --to "$reciever_key" --amount 0.1 --memo "ZenGo: 2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --first-messages "$party2msg1" --secret-state "$party1state" )
 partialsig1=$(echo "$party1_raw" | cut -d " " -f3)
 printf "Partial signature: %s\n" "$(short_print "$partialsig1")"
 sleep 0.3s
 
 
 party_2 "Process message 1 and generate message 2"
-printf "$ solana-tss agg-send-step-two --keypair %s --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --first-messages %s --secret-state %s\n" \
+printf "$ solana-tss agg-send-step-two --keypair %s --to %s --amount 0.1 --memo \"ZenGo: 2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --first-messages %s --secret-state %s\n" \
   "$(short_print "$secretkey2")" "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$party1msg1")" "$(short_print "$party2state")"
 sleep 0.6s
-party2_raw=$( solana-tss agg-send-step-two --keypair "$secretkey2" --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --first-messages "$party1msg1" --secret-state "$party2state" )
+party2_raw=$( solana-tss agg-send-step-two --keypair "$secretkey2" --to "$reciever_key" --amount 0.1 --memo "ZenGo: 2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --first-messages "$party1msg1" --secret-state "$party2state" )
 partialsig2=$(echo "$party2_raw" | cut -d " " -f3)
 printf "Partial signature: %s\n\n" "$(short_print "$partialsig2")"
 sleep 0.3s
 
 all_parties "Combine the signatures and send"
-printf "$ solana-tss aggregate-signatures-and-broadcast --net devnet --to %s --amount 0.1 --memo \"2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --signatures %s --signatures %s\n" \
+printf "$ solana-tss aggregate-signatures-and-broadcast --net devnet --to %s --amount 0.1 --memo \"ZenGo: 2 Party Signing\" --keys %s --keys %s --recent-block-hash %s --signatures %s --signatures %s\n" \
   "$(short_print "$reciever_key")" "$(short_print "$pubkey1")" "$(short_print "$pubkey2")" "$(short_print "$recent_block_hash")" "$(short_print "$partialsig1")" "$(short_print "$partialsig2")"
 sleep 0.6s
-raw=$( solana-tss aggregate-signatures-and-broadcast --net devnet --to "$reciever_key" --amount 0.1 --memo "2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --signatures "$partialsig1" --signatures "$partialsig2")
+raw=$( solana-tss aggregate-signatures-and-broadcast --net devnet --to "$reciever_key" --amount 0.1 --memo "ZenGo: 2 Party Signing" --keys "$pubkey1" --keys "$pubkey2" --recent-block-hash "$recent_block_hash" --signatures "$partialsig1" --signatures "$partialsig2")
 printf "%s\n\n" "$raw"
 sleep 0.3s
 

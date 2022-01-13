@@ -21,8 +21,8 @@ fn main() -> Result<(), Error> {
     match opts {
         Options::Generate => {
             let keypair = Keypair::generate(&mut rand07::thread_rng());
-            println!("secret key: {}", keypair.to_base58_string());
-            println!("public key: {}", keypair.pubkey());
+            println!("secret share: {}", keypair.to_base58_string());
+            println!("public share: {}", keypair.pubkey());
         }
         Options::Balance { address, net } => {
             let rpc_client = RpcClient::new(net.get_cluster_url().to_string());
