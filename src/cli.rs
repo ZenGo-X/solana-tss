@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
+use clap::Parser;
 use solana_sdk::hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
-use clap::Parser;
 
 use crate::error::Error;
 use crate::serialization::{AggMessage1, PartialSignature, SecretAggStepOne, Serialize};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Parser)]
 #[clap(about, version, author)]
 pub enum Options {

@@ -1,3 +1,4 @@
+use clap::Parser;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::message::Message;
@@ -5,7 +6,6 @@ use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{native_token, signature::Signer, system_instruction};
 use spl_memo::solana_program::pubkey::Pubkey;
-use clap::Parser;
 
 use crate::cli::Options;
 use crate::error::Error;
